@@ -1,0 +1,30 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout الكود
+        uses: actions/checkout@v4
+
+      - name: تثبيت Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: تثبيت Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: بناء تطبيق ويندوز
+        run: cargo tauri build
+
+      - name: رفع ملفات التثبيت (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: yousef-erp-windows-installer
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
