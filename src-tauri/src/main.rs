@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 const DATA_FILE_NAME: &str = "data.json";
 
@@ -42,7 +43,19 @@ fn data_file_location(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 fn main() {
+    let migrations = vec![Migration {
+        version: 1,
+        description: "initial_schema",
+        sql: include_str!("../migrations/001_initial.sql"),
+        kind: MigrationKind::Up,
+    }];
+
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:data.db", migrations)
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             load_data,
             save_data,
