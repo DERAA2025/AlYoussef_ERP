@@ -1644,11 +1644,21 @@ async function migrateFromLegacyJsonIfNeeded(){
   await dbExecute("INSERT OR REPLACE INTO app_meta (key,value) VALUES ('migrated_from_json','true')");
 }
 
+function _errText(err){
+  try{
+    if(err==null)return'خطأ غير معروف';
+    if(typeof err==='string')return err;
+    if(err.message)return err.message;
+    return JSON.stringify(err);
+  }catch(e){return String(err);}
+}
+
 function save(){
   if(_tauriInvoke){
     saveAllToDb(db).catch(err=>{
       console.error('Save error (SQLite):',err);
       toast('تعذّر حفظ البيانات','error');
+      alert('تفاصيل خطأ الحفظ (يُرجى تصوير هذه الرسالة):\n\n'+_errText(err));
     });
     return;
   }
@@ -1662,6 +1672,7 @@ async function load(){
     }catch(e){
       console.error('Load error (SQLite):',e);
       toast('تعذّر تحميل البيانات من قاعدة البيانات','error');
+      alert('تفاصيل خطأ التحميل (يُرجى تصوير هذه الرسالة):\n\n'+_errText(e));
     }
     return;
   }
