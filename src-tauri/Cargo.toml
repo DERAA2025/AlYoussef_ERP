@@ -1,6 +1,6 @@
 [package]
 name = "yousef-erp"
-version = "1.0.0"
+version = "1.1.0"
 description = "نظام اليوسف لإدارة المقاولات - تطبيق سطح مكتب"
 authors = ["Al-Yousef Contracting"]
 edition = "2021"
