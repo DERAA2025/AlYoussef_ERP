@@ -252,6 +252,19 @@ textarea{resize:vertical;min-height:80px;}
 .type-fixed{background:var(--purple-light);color:#5B21B6;border:1px solid #DDD6FE;}
 .type-itemized{background:#DBEAFE;color:#1D4ED8;border:1px solid #BFDBFE;}
 .wbs-code{font-family:'SF Mono',Consolas,monospace;font-size:11px;background:var(--warning-light);color:#92400E;padding:2px 7px;border-radius:4px;border:1px solid #FDE68A;font-weight:600;}
+.wbs-node{border-right:2px solid var(--border);padding-right:12px;margin-bottom:2px;}
+.wbs-node.wbs-lvl-1{border-right-color:var(--primary-glow);}
+.wbs-node.wbs-lvl-2{border-right-color:var(--accent);}
+.wbs-node.wbs-lvl-3{border-right-color:var(--text3);}
+.wbs-row{display:flex;gap:8px;align-items:center;padding:6px 4px;border-radius:6px;}
+.wbs-row:hover{background:var(--bg3);}
+.wbs-row input{padding:5px 8px;font-size:13px;}
+.wbs-children{margin-right:18px;margin-top:2px;}
+.wbs-tree-toggle{cursor:pointer;width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--text3);flex-shrink:0;border:none;background:none;}
+.wbs-tree-row{cursor:pointer;transition:background 0.15s;}
+.wbs-tree-row:hover{background:var(--bg3);}
+.wbs-tree-children{display:none;}
+.wbs-tree-children.open{display:table-row-group;}
 .action-btns{display:flex;gap:5px;align-items:center;}
 
 /* ===== ITEM CARDS GRID ===== */
@@ -525,8 +538,8 @@ textarea{resize:vertical;min-height:80px;}
     </div>
     <div class="tab-content active" id="set-wbs">
       <div class="card">
-        <div class="card-header"><div><div class="card-title">رموز WBS</div><div class="card-sub">بنية تقسيم العمل — مستوى واحد</div></div><button class="btn btn-primary btn-sm" onclick="addWBSRow()">+ إضافة رمز</button></div>
-        <div class="table-wrap"><table><thead><tr><th>الكود</th><th>الوصف</th><th>الفئة</th><th>إجراءات</th></tr></thead><tbody id="wbsTable"></tbody></table></div>
+        <div class="card-header"><div><div class="card-title">رموز WBS</div><div class="card-sub">بنية تقسيم العمل — 3 مستويات (فئة رئيسية ← تصنيف ← بند تفصيلي)</div></div><button class="btn btn-primary btn-sm" onclick="addWBSRow(1,'')">+ إضافة فئة رئيسية</button></div>
+        <div id="wbsTree"></div>
       </div>
     </div>
     <div class="tab-content" id="set-company">
@@ -1238,6 +1251,28 @@ textarea{resize:vertical;min-height:80px;}
   </div>
 </div>
 
+<!-- SUB-CONTRACT (single contract) STATEMENT MODAL -->
+<div class="modal-overlay" id="subContractStatementModal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="scStmtTitle">كشف حساب عقد باطن</span>
+      <button class="modal-close" onclick="closeModal('subContractStatementModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div id="scStmtSummary" style="margin-bottom:20px"></div>
+      <div id="scStmtItemsSection" style="margin-bottom:20px"></div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px">الدفعات المسجّلة على هذا العقد</div>
+        <div id="scStmtPaymentsContent"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('subContractStatementModal')">إغلاق</button>
+      <button class="btn btn-primary" id="scStmtAddPaymentBtn">+ تسجيل دفعة على هذا العقد</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONTRACT DETAILS MODAL -->
 <div class="modal-overlay" id="contractDetailsModal">
   <div class="modal modal-lg">
@@ -1505,8 +1540,8 @@ async function saveAllToDb(dbObj){
         [p.id,p.supplierId,p.date,p.amount,p.method,p.ref,p.notes]);
 
     for(const w of dbObj.wbsCodes||[])
-      await dbExecute(`INSERT INTO wbs_codes (id,code,desc,cat) VALUES (?,?,?,?)`,
-        [w.id,w.code,w.desc,w.cat]);
+      await dbExecute(`INSERT INTO wbs_codes (id,code,desc,cat,level,parent_code) VALUES (?,?,?,?,?,?)`,
+        [w.id,w.code,w.desc,w.cat,w.level,w.parentCode||null]);
 
     const co=dbObj.company||{};
     await dbExecute(
@@ -1591,7 +1626,7 @@ async function loadAllFromDb(target){
   target.supplierPayments=supplierPayments.map(p=>({id:p.id,supplierId:p.supplier_id,date:p.date,amount:p.amount,method:p.method,ref:p.ref,notes:p.notes}));
 
   const wbsCodes=await dbSelect('SELECT * FROM wbs_codes');
-  target.wbsCodes=wbsCodes.map(w=>({id:w.id,code:w.code,desc:w.desc,cat:w.cat}));
+  target.wbsCodes=wbsCodes.map(w=>({id:w.id,code:w.code,desc:w.desc,cat:w.cat,level:w.level,parentCode:w.parent_code||''}));
 
   const company=await dbSelect('SELECT * FROM company_settings WHERE id=1');
   target.company=company.length?{name:company[0].name,reg:company[0].reg,phone:company[0].phone,address:company[0].address}:{name:'',reg:'',phone:'',address:''};
@@ -1751,6 +1786,69 @@ function renderPage(page){
 }
 
 // ========== HELPERS ==========
+// ---- WBS hierarchy (levels 1/2/3) ----
+function wbsSortedList(){
+  // Returns db.wbsCodes ordered as a tree walk (level 1, then its children, then their
+  // children...), each entry annotated with .depth (0-based) for indentation.
+  const byParent={};
+  db.wbsCodes.forEach(w=>{
+    const p=w.parentCode||'';
+    (byParent[p]=byParent[p]||[]).push(w);
+  });
+  const out=[];
+  function walk(parentCode,depth){
+    (byParent[parentCode]||[]).forEach(w=>{
+      out.push({...w,depth});
+      walk(w.code,depth+1);
+    });
+  }
+  walk('',0);
+  return out;
+}
+function wbsOptionsHtml(selectedCode){
+  return wbsSortedList().map(w=>{
+    const indent='&nbsp;&nbsp;'.repeat(w.depth);
+    const prefix=w.depth>0?'— ':'';
+    return `<option value="${w.code}" ${w.code===selectedCode?'selected':''}>${indent}${prefix}${w.code}</option>`;
+  }).join('');
+}
+// Rolls any WBS code up to its level-1 ancestor. Returns that ancestor's own
+// {code,desc} — or the code itself (as a fallback "category") if it has no
+// parent chain, or if it isn't a recognized code at all (e.g. items with no
+// WBS assigned, or a stray code from before the hierarchy existed).
+function wbsLevel1Of(code){
+  if(!code)return{code:'',desc:'بدون WBS'};
+  let w=db.wbsCodes.find(x=>x.code===code);
+  if(!w)return{code,desc:code};
+  let guard=0;
+  while(w.parentCode&&guard++<10){
+    const parent=db.wbsCodes.find(x=>x.code===w.parentCode);
+    if(!parent)break;
+    w=parent;
+  }
+  return{code:w.code,desc:w.desc||w.code};
+}
+// One-time, idempotent migration: legacy WBS codes (from before the 3-level
+// hierarchy existed) only had a free-text "category" label. This turns each
+// unique category into a real level-1 parent and re-parents the existing
+// codes under it as level 2 — without ever touching the codes' own `code`
+// string, so every BOQ/assignment/extract item that already references one
+// keeps working unchanged.
+function ensureWbsHierarchy(){
+  const legacy=db.wbsCodes.filter(w=>w.level==null);
+  if(!legacy.length)return;
+  legacy.forEach(w=>{
+    const catName=(w.cat||'').trim();
+    const derivedCode=(w.code||'').includes('.')?w.code.split('.')[0]:(catName||w.code||'GEN');
+    if(!db.wbsCodes.some(x=>x.level===1&&x.code===derivedCode)){
+      db.wbsCodes.push({id:uid(),code:derivedCode,desc:catName||derivedCode,level:1,parentCode:''});
+    }
+    w.level=2;
+    w.parentCode=derivedCode;
+  });
+  save();
+}
+
 const CURRENCY='ج.م';
 function fmt(n){n=parseFloat(n)||0;return n.toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+CURRENCY;}
 function fmtS(n){n=parseFloat(n)||0;if(Math.abs(n)>=1e9)return(n/1e9).toFixed(2)+' مليار '+CURRENCY;if(Math.abs(n)>=1e6)return(n/1e6).toFixed(2)+' مليون '+CURRENCY;if(Math.abs(n)>=1e3)return n.toLocaleString('ar-EG',{maximumFractionDigits:0})+' '+CURRENCY;return n.toLocaleString('ar-EG',{maximumFractionDigits:0})+' '+CURRENCY;}
@@ -2400,7 +2498,7 @@ function addBOQRow(){
   addBOQRowData({id:uid(),wbs:'',desc:'',unit:'',qty:0,price:0},document.getElementById('boqEditorBody').children.length+1,t==='itemized');
 }
 function addBOQRowData(r,idx,isI){
-  const wbsOpts=db.wbsCodes.map(w=>`<option value="${w.code}" ${w.code===r.wbs?'selected':''}>${w.code}</option>`).join('');
+  const wbsOpts=wbsOptionsHtml(r.wbs);
   const tr=document.createElement('tr');tr.dataset.id=r.id||uid();
   // For fixed type: qty column shows "—" and is disabled; line total = price only (unit price)
   tr.innerHTML=`<td style="text-align:center;color:var(--text3)">${idx}</td>
@@ -2686,7 +2784,7 @@ function applyAssignItemsImport(){
     tr.dataset.contractPrice=price;
     tr.dataset.wbs=wbs;
     tr.dataset.desc=desc;
-    const wOpts=db.wbsCodes.map(w=>`<option value="${w.code}" ${w.code===wbs?'selected':''}>${w.code}</option>`).join('');
+    const wOpts=wbsOptionsHtml(wbs);
     tr.innerHTML=`
       <td>${n}</td>
       <td><select class="boq-wbs" style="width:85px"><option value="">—</option>${wOpts}</select></td>
@@ -2971,7 +3069,7 @@ function toggleAnnexFields(){
   document.getElementById('an_boq_section').style.display=['price','addbod'].includes(t)?'':'none';
 }
 function addAnnexBOQRow(){
-  const wOpts=db.wbsCodes.map(w=>`<option value="${w.code}">${w.code}</option>`).join('');
+  const wOpts=wbsOptionsHtml('');
   const idx=document.getElementById('annexBoqBody').children.length+1;
   const tr=document.createElement('tr');
   tr.innerHTML=`<td>${idx}</td><td><select><option value="">—</option>${wOpts}</select></td><td><input type="text" placeholder="الوصف" style="min-width:140px"></td><td><input type="text" style="width:55px"></td><td><input type="number" value="0" min="0" oninput="calcAnnexLine(this)"></td><td><input type="number" value="0" min="0" oninput="calcAnnexLine(this)"></td><td class="ann-lt" style="color:var(--accent)">0</td><td><button class="btn btn-xs btn-danger" onclick="this.closest('tr').remove()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>`;
@@ -3385,7 +3483,7 @@ function addSelectedBOQItems(){
       return inputs[0]?.value===r.desc&&tr.querySelector('.boq-wbs')?.value===r.wbs;
     });
     if(exists){toast(`البند "${r.desc}" موجود بالفعل في الأمر`,'warning');return;}
-    const wOpts=db.wbsCodes.map(w=>`<option value="${w.code}" ${w.code===r.wbs?'selected':''}>${w.code}</option>`).join('');
+    const wOpts=wbsOptionsHtml(r.wbs);
     const newIdx=document.getElementById('assignItemsBody').children.length+1;
     const tr=document.createElement('tr');
     tr.innerHTML=`
@@ -3431,7 +3529,7 @@ function renderAssignItemsEditor(items,contractId){
   }
 
   items.forEach((it,i)=>{
-    const wOpts=db.wbsCodes.map(w=>`<option value="${w.code}" ${w.code===it.wbs?'selected':''}>${w.code}</option>`).join('');
+    const wOpts=wbsOptionsHtml(it.wbs);
     // Calculate already-assigned qty in OTHER assignments for this item (itemized only)
     const otherAssigns=db.assignments.filter(a=>a.contractId===contractId&&a.id!==(editId||'__none__'));
     const alreadyAssigned=c?.type==='itemized'? otherAssigns.reduce((s,a)=>{
@@ -3463,7 +3561,7 @@ function renderAssignItemsEditor(items,contractId){
   updateAssignItemsTotal();
 }
 function addAssignItemRow(){
-  const wOpts=db.wbsCodes.map(w=>`<option value="${w.code}">${w.code}</option>`).join('');
+  const wOpts=wbsOptionsHtml('');
   const idx=document.getElementById('assignItemsBody').children.length+1;
   const tr=document.createElement('tr');
   tr.innerHTML=`<td>${idx}</td><td><select class="boq-wbs" style="width:85px"><option value="">—</option>${wOpts}</select></td><td><input type="text" style="min-width:150px"></td><td><input type="text" style="width:55px"></td><td>—</td><td><input type="number" class="as-qty" value="0" min="0" oninput="updateAssignItemsTotal()"></td><td><input type="number" class="as-price" value="0" min="0" oninput="updateAssignItemsTotal()"></td><td class="as-lt" style="color:var(--accent)">0</td><td><button class="btn btn-xs btn-danger" onclick="this.closest('tr').remove();updateAssignItemsTotal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>`;
@@ -4056,8 +4154,9 @@ function subTotalPaid(subId){
 }
 
 let currentSubStatementId=null;
+let currentSubContractStatementId=null;
 
-function openSubPaymentModal(subId,paymentId=null){
+function openSubPaymentModal(subId,paymentId=null,preselectContractId=''){
   currentSubStatementId=subId;
   editId=paymentId;
   const s=db.subcontractors.find(s=>s.id===subId);
@@ -4086,6 +4185,7 @@ function openSubPaymentModal(subId,paymentId=null){
     document.getElementById('sbpay_method').value='كاش';
     document.getElementById('sbpay_ref').value='';
     document.getElementById('sbpay_notes').value='';
+    if(preselectContractId)sel.value=preselectContractId;
   }
   openModal('subPaymentModal');
 }
@@ -4186,13 +4286,90 @@ function deleteSubPayment(paymentId){
   confirmDelete('حذف هذه الدفعة؟',()=>{
     db.subPayments=(db.subPayments||[]).filter(p=>p.id!==paymentId);
     save();renderSubcontractors();
-    renderSubStatement(currentSubStatementId);
+    if(document.getElementById('subStatementModal').classList.contains('open'))
+      renderSubStatement(currentSubStatementId);
+    if(document.getElementById('subContractStatementModal').classList.contains('open'))
+      renderSubContractStatement(currentSubContractStatementId);
     toast('تم الحذف','warning');
   });
 }
 function addSubPaymentFromStatement(){
   closeModal('subStatementModal');
   setTimeout(()=>openSubPaymentModal(currentSubStatementId),200);
+}
+
+// ---- Single sub-contract statement (one contract only, not all of a subcontractor's contracts) ----
+function openSubContractStatement(scId){
+  const sc=db.subContracts.find(s=>s.id===scId);
+  if(!sc)return;
+  currentSubContractStatementId=scId;
+  document.getElementById('scStmtTitle').textContent=`كشف حساب — عقد ${sc.num||'—'} (${subName(sc.subId)})`;
+  document.getElementById('scStmtAddPaymentBtn').onclick=()=>{
+    closeModal('subContractStatementModal');
+    setTimeout(()=>openSubPaymentModal(sc.subId,null,sc.id),200);
+  };
+  renderSubContractStatement(scId);
+  openModal('subContractStatementModal');
+}
+function renderSubContractStatement(scId){
+  const sc=db.subContracts.find(s=>s.id===scId);
+  if(!sc)return;
+  const value=parseFloat(sc.value)||0;
+  const payments=(db.subPayments||[]).filter(p=>p.contractId===scId).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const totalPaid=payments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+  const balance=value-totalPaid;
+  const methodIcons={كاش:'💵','تحويل بنكي':'🏦',شيك:'📝',بطاقة:'💳'};
+
+  document.getElementById('scStmtSummary').innerHTML=`
+    <div style="display:flex;gap:20px;flex-wrap:wrap;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 20px">
+      <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">قيمة العقد</div><div style="font-size:20px;font-weight:700;color:var(--accent)">${fmt(value)}</div></div>
+      <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">إجمالي المدفوع</div><div style="font-size:20px;font-weight:700;color:var(--success)">${fmt(totalPaid)}</div></div>
+      <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">الرصيد المتبقي</div><div style="font-size:20px;font-weight:700;color:${balance>0?'var(--danger)':'var(--success)'}">${fmt(balance)}</div></div>
+      <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px">عدد الدفعات</div><div style="font-size:20px;font-weight:700;color:var(--text)">${payments.length}</div></div>
+    </div>`;
+
+  // Items (BOQ type) or planned payment schedule (lump type) — read-only reference, from the contract itself
+  const itemsSection=document.getElementById('scStmtItemsSection');
+  if(sc.type==='boq'&&(sc.items||[]).length){
+    itemsSection.innerHTML=`
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px">بنود العقد</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>المرجع</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الباطن</th><th>الإجمالي</th></tr></thead>
+        <tbody>${sc.items.map(it=>`<tr><td>${it.wbsRef||'—'}</td><td>${it.desc||'—'}</td><td>${it.unit||'—'}</td><td style="text-align:center">${it.qty||0}</td><td style="text-align:center">${fmt(it.price||0)}</td><td style="color:var(--accent);font-weight:600">${fmt((it.qty||0)*(it.price||0))}</td></tr>`).join('')}</tbody>
+      </table></div>`;
+  }else if(sc.type==='lump'&&(sc.payments||[]).length){
+    itemsSection.innerHTML=`
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:10px">جدول الدفعات المخطط له</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>أمر الإسناد</th><th>المبلغ</th><th>التاريخ</th><th>الحالة</th><th>ملاحظات</th></tr></thead>
+        <tbody>${sc.payments.map(p=>`<tr><td>${p.assignRef?assignNum(p.assignRef):'—'}</td><td style="color:var(--accent)">${fmt(p.amount||0)}</td><td>${p.date||'—'}</td><td>${p.status||'—'}</td><td>${p.notes||'—'}</td></tr>`).join('')}</tbody>
+      </table></div>`;
+  }else{
+    itemsSection.innerHTML='';
+  }
+
+  // Actual recorded payments for this contract only
+  let running=0;
+  const rowsHtml=payments.map(p=>{
+    running+=parseFloat(p.amount)||0;
+    return`<tr>
+      <td>${p.date||'—'}</td>
+      <td style="color:var(--success);font-weight:600">${fmt(p.amount)}</td>
+      <td><span class="badge badge-green">${methodIcons[p.method]||''} ${p.method||'—'}</span></td>
+      <td style="font-family:monospace">${p.ref||'—'}</td>
+      <td>${p.notes||'—'}</td>
+      <td style="color:${(value-running)>0?'var(--danger)':'var(--success)'};font-weight:600">${fmt(value-running)}</td>
+      <td><div class="action-btns"><button class="btn btn-xs btn-ghost" onclick="editSubPayment('${p.id}')">✏️</button><button class="btn btn-xs btn-danger" onclick="deleteSubPayment('${p.id}')">🗑️</button></div></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('scStmtPaymentsContent').innerHTML=payments.length
+    ?`<div class="table-wrap"><table>
+        <thead><tr><th>التاريخ</th><th>المبلغ</th><th>طريقة الدفع</th><th>المرجع</th><th>ملاحظات</th><th>الرصيد بعدها</th><th>إجراءات</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot><tr><td style="text-align:right">الإجمالي</td><td style="color:var(--success);font-weight:700">${fmt(totalPaid)}</td><td colspan="5"></td></tr></tfoot>
+      </table></div>`
+    :`<div class="empty-state" style="padding:24px"><div class="empty-icon">💸</div><p>لا توجد دفعات مسجّلة على هذا العقد بعد</p></div>`;
 }
 
 // ========== SUB-CONTRACTS ==========
@@ -4259,6 +4436,7 @@ function renderSubContracts(q=''){
         <div class="progress-bar" style="height:7px"><div class="progress-fill progress-${pct<50?'amber':pct<80?'blue':'green'}" style="width:${pct}%"></div></div>
       </div>
       <div class="item-card-footer">
+        <button class="btn btn-xs btn-primary" onclick="openSubContractStatement('${sc.id}')">📋 كشف حساب</button>
         <button class="btn btn-xs btn-ghost" onclick="editSubContract('${sc.id}')">✏️ تعديل</button>
         <button class="btn btn-xs btn-danger" onclick="deleteSubContract('${sc.id}')">🗑️</button>
       </div>
@@ -5473,10 +5651,8 @@ function renderRepWbs(){
   const contracts=getFilteredContracts();
   const extracts=getFilteredExtracts();
 
-  // تجميع البيانات حسب كود WBS
-  // من بنود أوامر الإسناد
-  const wbsMap={}; // code -> {desc, cat, assignQty, extractedQty, value, extractedValue}
-
+  // تجميع البيانات حسب كود WBS الفعلي المستخدم في البنود
+  const wbsMap={};
   contracts.forEach(c=>{
     const assigns=db.assignments.filter(a=>a.contractId===c.id);
     assigns.forEach(a=>{
@@ -5485,7 +5661,6 @@ function renderRepWbs(){
         if(!wbsMap[code])wbsMap[code]={
           code,
           desc:db.wbsCodes.find(w=>w.code===code)?.desc||it.desc||code,
-          cat:db.wbsCodes.find(w=>w.code===code)?.cat||'',
           contracts:new Set(),
           assigns:new Set(),
           assignQty:0,
@@ -5498,7 +5673,6 @@ function renderRepWbs(){
         wbsMap[code].assignQty+=(parseFloat(it.assignQty)||0);
         wbsMap[code].assignValue+=(parseFloat(it.assignQty)||0)*(parseFloat(it.price)||0);
 
-        // الكميات المستخلصة من مستخلصات هذا الأمر
         extracts.filter(e=>e.assignId===a.id).forEach(e=>{
           const ei=(e.items||[]).find((x,idx)=>idx===(a.items||[]).indexOf(it)||(x.wbs&&x.wbs===code&&x.desc===it.desc));
           if(ei){
@@ -5515,15 +5689,17 @@ function renderRepWbs(){
   const totAssignVal=rows.reduce((s,r)=>s+r.assignValue,0);
   const totExtractVal=rows.reduce((s,r)=>s+r.extractedValue,0);
 
-  // تجميع حسب الفئة
-  const cats={};
+  // كل كود مستخدَم يتصعّد لأصله في المستوى 1 (الفئة الرئيسية)
+  const level1Map={};
   rows.forEach(r=>{
-    const cat=r.cat||'غير مصنف';
-    if(!cats[cat])cats[cat]={cat,val:0,extVal:0};
-    cats[cat].val+=r.assignValue;
-    cats[cat].extVal+=r.extractedValue;
+    const l1=wbsLevel1Of(r.code);
+    const key=l1.code||'__NONE__';
+    if(!level1Map[key])level1Map[key]={code:l1.code,desc:l1.desc,val:0,extVal:0,children:[]};
+    level1Map[key].val+=r.assignValue;
+    level1Map[key].extVal+=r.extractedValue;
+    level1Map[key].children.push(r);
   });
-  const catRows=Object.values(cats).sort((a,b)=>b.val-a.val);
+  const level1Rows=Object.values(level1Map).sort((a,b)=>b.val-a.val);
 
   el.innerHTML=`
     <!-- KPIs -->
@@ -5535,25 +5711,18 @@ function renderRepWbs(){
       ${kpi('📊','نسبة الإنجاز',totAssignVal>0?(totExtractVal/totAssignVal*100).toFixed(1)+'%':'0%','من إجمالي الأوامر','green')}
     </div>
 
-    <!-- Category summary -->
-    ${catRows.length>1?`<div class="card" style="margin-bottom:16px">
-      <div class="card-title" style="margin-bottom:14px">ملخص حسب الفئة</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        ${catRows.map(r=>{
-          const pct=r.val>0?Math.min(100,Math.round(r.extVal/r.val*100)):0;
-          return`<div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:600;color:var(--text)">${r.cat}</span>
-              <span style="font-size:12px;color:var(--text3)">${fmt(r.extVal)} / ${fmt(r.val)} · <strong style="color:${pct>=80?'var(--success)':pct>=50?'var(--primary-light)':'var(--warning)'}">${pct}%</strong></span>
-            </div>
-            <div class="progress-bar" style="height:8px">
-              <div class="progress-fill progress-${pct<50?'amber':pct<80?'blue':'green'}" style="width:${pct}%"></div>
-            </div>
-          </div>`;}).join('')}
-      </div>
+    ${level1Rows.length?`
+    <!-- مقارنات الفئات الرئيسية -->
+    <div class="charts-grid">
+      <div class="chart-card"><div class="card-header"><div><div class="card-title">مقارنة الأوامر والمستخلص</div><div class="card-sub">إجمالي كل فئة رئيسية</div></div></div><canvas id="chartWbsCompare"></canvas></div>
+      <div class="chart-card"><div class="card-header"><div><div class="card-title">توزيع قيمة الأوامر</div><div class="card-sub">نسبة كل فئة من الإجمالي</div></div></div><canvas id="chartWbsDist"></canvas></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title" style="margin-bottom:14px">مقارنة نسب الإنجاز بين الفئات</div>
+      <div style="height:${Math.max(140,level1Rows.length*42)}px"><canvas id="chartWbsCompletion"></canvas></div>
     </div>`:''}
 
-    <!-- WBS Table -->
+    <!-- جدول قابل للطي -->
     <div class="card" style="padding:0">
       <div class="card-header" style="padding:14px 16px">
         <div class="card-title">تفصيل الأعمال حسب كود WBS</div>
@@ -5561,7 +5730,8 @@ function renderRepWbs(){
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>كود WBS</th><th>الوصف</th><th>الفئة</th>
+          <th style="width:28px"></th>
+          <th>كود WBS</th><th>الوصف</th>
           <th>العقود</th><th>الأوامر</th>
           <th style="text-align:center">الكمية المسندة</th>
           <th style="text-align:center;color:var(--accent)">قيمة الأوامر</th>
@@ -5570,32 +5740,55 @@ function renderRepWbs(){
           <th style="text-align:center;color:var(--warning)">المتبقي</th>
           <th style="text-align:center">الإنجاز</th>
         </tr></thead>
-        <tbody>${rows.length?rows.map(r=>{
-          const pct=r.assignValue>0?Math.min(100,Math.round(r.extractedValue/r.assignValue*100)):0;
-          const rem=r.assignValue-r.extractedValue;
-          return`<tr>
-            <td><span class="wbs-code">${r.code}</span></td>
-            <td>${r.desc}</td>
-            <td>${r.cat?`<span class="badge badge-blue" style="font-size:10px">${r.cat}</span>`:'—'}</td>
-            <td style="text-align:center;color:var(--text3)">${r.contracts.size}</td>
-            <td style="text-align:center;color:var(--text3)">${r.assigns.size}</td>
-            <td style="text-align:center">${r.assignQty>0?r.assignQty.toLocaleString('ar-EG'):'—'}</td>
-            <td style="text-align:center;color:var(--accent);font-weight:600">${fmt(r.assignValue)}</td>
-            <td style="text-align:center">${r.extractedQty>0?r.extractedQty.toLocaleString('ar-EG'):'—'}</td>
-            <td style="text-align:center;color:var(--success);font-weight:600">${fmt(r.extractedValue)}</td>
-            <td style="text-align:center;color:${rem>0?'var(--warning)':'var(--success)'};">${rem>0?fmt(rem):'✅'}</td>
+        <tbody>${level1Rows.length?level1Rows.map((l1,i)=>{
+          const rem1=l1.val-l1.extVal;
+          const pct1=l1.val>0?Math.min(100,Math.round(l1.extVal/l1.val*100)):0;
+          const allContracts=new Set(),allAssigns=new Set();
+          l1.children.forEach(c=>{c.contracts.forEach(x=>allContracts.add(x));c.assigns.forEach(x=>allAssigns.add(x));});
+          const groupId=`wbsGrp${i}`;
+          const childRows=l1.children.map(r=>{
+            const pct=r.assignValue>0?Math.min(100,Math.round(r.extractedValue/r.assignValue*100)):0;
+            const rem=r.assignValue-r.extractedValue;
+            return`<tr class="${groupId}" style="display:none">
+              <td></td>
+              <td><span class="wbs-code">${r.code}</span></td>
+              <td style="padding-right:20px">${r.desc}</td>
+              <td style="text-align:center;color:var(--text3)">${r.contracts.size}</td>
+              <td style="text-align:center;color:var(--text3)">${r.assigns.size}</td>
+              <td style="text-align:center">${r.assignQty>0?r.assignQty.toLocaleString('ar-EG'):'—'}</td>
+              <td style="text-align:center;color:var(--accent)">${fmt(r.assignValue)}</td>
+              <td style="text-align:center">${r.extractedQty>0?r.extractedQty.toLocaleString('ar-EG'):'—'}</td>
+              <td style="text-align:center;color:var(--success)">${fmt(r.extractedValue)}</td>
+              <td style="text-align:center;color:${rem>0?'var(--warning)':'var(--success)'}">${rem>0?fmt(rem):'✅'}</td>
+              <td style="text-align:center">
+                <div style="display:flex;align-items:center;gap:5px;justify-content:center">
+                  <div style="width:50px;height:6px;background:var(--bg4);border-radius:3px"><div style="height:100%;border-radius:3px;background:${pct>=80?'var(--success)':pct>=50?'var(--primary-light)':'var(--warning)'};width:${pct}%"></div></div>
+                  <span style="font-size:12px;font-weight:700;color:${pct>=80?'var(--success)':pct>=50?'var(--primary-light)':'var(--warning)'}">${pct}%</span>
+                </div>
+              </td>
+            </tr>`;
+          }).join('');
+          return`<tr class="wbs-tree-row" onclick="toggleWbsGroup('${groupId}',this)">
+            <td style="text-align:center;color:var(--text3)"><span class="wbs-tree-toggle">▶</span></td>
+            <td colspan="2"><strong style="color:var(--text)">${l1.desc}</strong> <span class="wbs-code" style="margin-right:6px">${l1.code}</span></td>
+            <td style="text-align:center;color:var(--text3)">${allContracts.size}</td>
+            <td style="text-align:center;color:var(--text3)">${allAssigns.size}</td>
+            <td></td>
+            <td style="text-align:center;color:var(--accent);font-weight:700">${fmt(l1.val)}</td>
+            <td></td>
+            <td style="text-align:center;color:var(--success);font-weight:700">${fmt(l1.extVal)}</td>
+            <td style="text-align:center;color:${rem1>0?'var(--warning)':'var(--success)'};font-weight:700">${rem1>0?fmt(rem1):'✅'}</td>
             <td style="text-align:center">
               <div style="display:flex;align-items:center;gap:5px;justify-content:center">
-                <div style="width:50px;height:6px;background:var(--bg4);border-radius:3px">
-                  <div style="height:100%;border-radius:3px;background:${pct>=80?'var(--success)':pct>=50?'var(--primary-light)':'var(--warning)'};width:${pct}%"></div>
-                </div>
-                <span style="font-size:12px;font-weight:700;color:${pct>=80?'var(--success)':pct>=50?'var(--primary-light)':'var(--warning)'}">${pct}%</span>
+                <div style="width:50px;height:6px;background:var(--bg4);border-radius:3px"><div style="height:100%;border-radius:3px;background:${pct1>=80?'var(--success)':pct1>=50?'var(--primary-light)':'var(--warning)'};width:${pct1}%"></div></div>
+                <span style="font-size:12px;font-weight:700;color:${pct1>=80?'var(--success)':pct1>=50?'var(--primary-light)':'var(--warning)'}">${pct1}%</span>
               </div>
             </td>
-          </tr>`;}).join(''):`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">لا توجد بنود WBS — تأكد من تعيين أكواد WBS على بنود الأوامر</td></tr>`}
+          </tr>${childRows}`;
+        }).join(''):`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text3)">لا توجد بنود WBS — تأكد من تعيين أكواد WBS على بنود الأوامر</td></tr>`}
         </tbody>
         <tfoot><tr style="background:var(--bg3);font-weight:700">
-          <td colspan="6" style="padding:10px;text-align:right">الإجمالي</td>
+          <td colspan="5" style="padding:10px;text-align:right">الإجمالي</td>
           <td style="text-align:center;color:var(--accent)">${fmt(totAssignVal)}</td>
           <td style="text-align:center"></td>
           <td style="text-align:center;color:var(--success)">${fmt(totExtractVal)}</td>
@@ -5606,6 +5799,38 @@ function renderRepWbs(){
         </tr></tfoot>
       </table></div>
     </div>`;
+
+  if(!level1Rows.length)return;
+
+  ['wbsCompare','wbsDist','wbsCompletion'].forEach(k=>{if(activeCharts[k])try{activeCharts[k].destroy();}catch(e){}});
+
+  activeCharts.wbsCompare=new Chart(document.getElementById('chartWbsCompare').getContext('2d'),{
+    type:'bar',
+    data:{labels:level1Rows.map(l=>l.desc),datasets:[
+      {label:'قيمة الأوامر',data:level1Rows.map(l=>l.val),backgroundColor:'rgba(217,119,6,0.75)',borderRadius:5},
+      {label:'قيمة المستخلص',data:level1Rows.map(l=>l.extVal),backgroundColor:'rgba(5,150,105,0.75)',borderRadius:5},
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'#64748B'}}},scales:{x:{ticks:{color:'#64748B'}},y:{ticks:{color:'#64748B',callback:v=>fmtS(v)},grid:{color:'#E2E8F0'}}}}
+  });
+
+  activeCharts.wbsDist=new Chart(document.getElementById('chartWbsDist').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:level1Rows.map(l=>l.desc),datasets:[{data:level1Rows.map(l=>l.val),backgroundColor:['#0369A1','#D97706','#059669','#7C3AED','#DC2626','#0EA5E9','#F59E0B','#10B981','#EC4899','#64748B'],borderWidth:2,borderColor:'#FFFFFF'}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{color:'#64748B',font:{size:11}}}}}
+  });
+
+  const compPct=level1Rows.map(l=>l.val>0?Math.round(l.extVal/l.val*100):0);
+  activeCharts.wbsCompletion=new Chart(document.getElementById('chartWbsCompletion').getContext('2d'),{
+    type:'bar',
+    data:{labels:level1Rows.map(l=>l.desc),datasets:[{label:'نسبة الإنجاز %',data:compPct,backgroundColor:compPct.map(p=>p>=80?'rgba(16,185,129,0.75)':p>=50?'rgba(59,130,246,0.75)':'rgba(245,158,11,0.75)'),borderRadius:5}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{min:0,max:100,ticks:{color:'#64748B',callback:v=>v+'%'},grid:{color:'#E2E8F0'}},y:{ticks:{color:'#64748B'},grid:{color:'#E2E8F0'}}}}
+  });
+}
+function toggleWbsGroup(groupId,headerRow){
+  const opened=headerRow.classList.toggle('wbs-open');
+  document.querySelectorAll('.'+groupId).forEach(r=>r.style.display=opened?'table-row':'none');
+  const icon=headerRow.querySelector('.wbs-tree-toggle');
+  if(icon)icon.textContent=opened?'▼':'▶';
 }
 
 function exportWbsExcel(){
@@ -5617,7 +5842,7 @@ function exportWbsExcel(){
     db.assignments.filter(a=>a.contractId===c.id).forEach(a=>{
       (a.items||[]).forEach((it,idx)=>{
         const code=it.wbs||'بدون WBS';
-        if(!wbsMap[code])wbsMap[code]={code,desc:db.wbsCodes.find(w=>w.code===code)?.desc||it.desc||code,cat:db.wbsCodes.find(w=>w.code===code)?.cat||'',assignValue:0,extractedValue:0};
+        if(!wbsMap[code])wbsMap[code]={code,desc:db.wbsCodes.find(w=>w.code===code)?.desc||it.desc||code,cat:wbsLevel1Of(code).desc,assignValue:0,extractedValue:0};
         wbsMap[code].assignValue+=(parseFloat(it.assignQty)||0)*(parseFloat(it.price)||0);
         extracts.filter(e=>e.assignId===a.id).forEach(e=>{
           const ei=(e.items||[])[idx];
@@ -5646,10 +5871,67 @@ function renderSettings(){
   document.getElementById('companyAddress').value=co.address||'';
 }
 function renderWBSTable(){
-  document.getElementById('wbsTable').innerHTML=db.wbsCodes.map((w,i)=>`<tr><td><input type="text" value="${w.code}" style="width:80px" onchange="db.wbsCodes[${i}].code=this.value;save()"></td><td><input type="text" value="${w.desc}" style="min-width:200px" onchange="db.wbsCodes[${i}].desc=this.value;save()"></td><td><input type="text" value="${w.cat||''}" style="width:140px" onchange="db.wbsCodes[${i}].cat=this.value;save()"></td><td><button class="btn btn-xs btn-danger" onclick="deleteWBS('${w.id}')">🗑️</button></td></tr>`).join('');
+  const level1s=db.wbsCodes.filter(w=>w.level===1);
+  const container=document.getElementById('wbsTree');
+  if(!container)return;
+  if(!level1s.length){
+    container.innerHTML='<div class="empty-state" style="padding:24px"><div class="empty-icon">🗂️</div><h3>لا توجد فئات رئيسية بعد</h3><p>اضغط "+ إضافة فئة رئيسية" للبدء</p></div>';
+    return;
+  }
+  container.innerHTML=level1s.map(w=>renderWbsNode(w)).join('');
 }
-function addWBSRow(){db.wbsCodes.push({id:uid(),code:'X.00',desc:'وصف البند',cat:''});save();renderWBSTable();}
-function deleteWBS(id){db.wbsCodes=db.wbsCodes.filter(w=>w.id!==id);save();renderWBSTable();}
+function renderWbsNode(node){
+  const children=db.wbsCodes.filter(w=>w.parentCode===node.code&&w.level===(node.level+1));
+  return `<div class="wbs-node wbs-lvl-${node.level}">
+    <div class="wbs-row">
+      <input type="text" value="${node.code||''}" placeholder="الكود" style="width:90px" onchange="updateWbsField('${node.id}','code',this.value)">
+      <input type="text" value="${node.desc||''}" placeholder="الوصف" style="flex:1;min-width:160px" onchange="updateWbsField('${node.id}','desc',this.value)">
+      ${node.level<3?`<button class="btn btn-xs btn-ghost" onclick="addWBSRow(${node.level+1},'${node.code}')">+ إضافة تحت</button>`:''}
+      <button class="btn btn-xs btn-danger" onclick="deleteWBS('${node.id}')">🗑️</button>
+    </div>
+    ${children.length?`<div class="wbs-children">${children.map(c=>renderWbsNode(c)).join('')}</div>`:''}
+  </div>`;
+}
+function addWBSRow(level=1,parentCode=''){
+  db.wbsCodes.push({id:uid(),code:'',desc:'',level,parentCode,cat:''});
+  save();renderWBSTable();
+}
+function updateWbsField(id,field,value){
+  const w=db.wbsCodes.find(w=>w.id===id);
+  if(!w)return;
+  if(field==='code'){
+    const oldCode=w.code;
+    w.code=value;
+    // Cascade: keep any children pointing at this node's *code* in sync,
+    // since the hierarchy links by code string, not by internal id.
+    if(oldCode)db.wbsCodes.forEach(c=>{if(c.parentCode===oldCode)c.parentCode=value;});
+  }else{
+    w[field]=value;
+  }
+  save();renderWBSTable();
+}
+function deleteWBS(id){
+  const w=db.wbsCodes.find(w=>w.id===id);
+  if(!w)return;
+  const hasChildren=db.wbsCodes.some(c=>c.parentCode===w.code);
+  const doDelete=()=>{
+    const toDelete=new Set([id]);
+    let changed=true;
+    while(changed){
+      changed=false;
+      db.wbsCodes.forEach(c=>{
+        if(!toDelete.has(c.id)){
+          const isChildOfDeleted=db.wbsCodes.some(p=>toDelete.has(p.id)&&p.code===c.parentCode);
+          if(isChildOfDeleted){toDelete.add(c.id);changed=true;}
+        }
+      });
+    }
+    db.wbsCodes=db.wbsCodes.filter(c=>!toDelete.has(c.id));
+    save();renderWBSTable();toast('تم الحذف','warning');
+  };
+  if(hasChildren)confirmDelete('هذا الكود له بنود فرعية تحته — حذفه سيحذف كل ما تحته أيضًا. متأكد؟',doDelete);
+  else doDelete();
+}
 function saveCompanySettings(){
   db.company={name:document.getElementById('companyName').value,reg:document.getElementById('companyReg').value,phone:document.getElementById('companyPhone').value,address:document.getElementById('companyAddress').value};
   save();toast('تم حفظ بيانات الشركة');
@@ -5758,6 +6040,7 @@ function repairExtractValues(){
 
 (async()=>{
 await load();
+ensureWbsHierarchy();
 // Auto-repair: fix periodQty for all extracts chronologically (silent)
 (()=>{
   let repaired=false;
