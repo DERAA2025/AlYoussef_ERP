@@ -426,6 +426,10 @@ textarea{resize:vertical;min-height:80px;}
         <button class="modal-close" onclick="closeModal('assignDetailModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="modal-body" id="adm_body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('assignDetailModal')">إغلاق</button>
+        <button class="btn btn-primary" id="assignDetailsEditBtn">✏️ تعديل الأمر</button>
+      </div>
     </div>
   </div>
 
@@ -3178,51 +3182,62 @@ function openAssignmentDetails(id){
   const statusBadge={'جارٍ':'badge-blue','منتهٍ':'badge-green','موقوف':'badge-amber'}[a.status]||'badge-gray';
   const daysLeft=a.end?Math.ceil((new Date(a.end)-new Date())/86400000):null;
 
-  // Build extracts timeline
-  const extractsHtml=extracts.length?extracts.map(e=>{
-    const d=extractAllDeductions(e);
-    const sb={'مقدم':'badge-blue','معتمد':'badge-amber','مدفوع':'badge-green','مرفوض':'badge-red'}[e.status]||'badge-gray';
-    const hasDeds=d.totalDed>0;
-    return`<div class="adm-extract-card">
-      <div class="adm-extract-header">
-        <div>
-          <span style="font-size:14px;font-weight:700;color:var(--text)">${e.num}</span>
-          <span class="badge badge-blue" style="margin-right:6px;font-size:10px">${e.type||'مرحلي'}</span>
-          <span class="badge ${sb}" style="font-size:10px">${e.status}</span>
-        </div>
-        <div style="text-align:left">
-          <div style="font-size:11px;color:var(--text3)">${e.date||'—'}</div>
-          ${e.einvoice?`<div style="font-size:10px;color:var(--text3);font-family:monospace">🧾 ${e.einvoice}</div>`:''}
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${hasDeds?'10px':'0'}">
-        <div style="background:var(--success-light);border-radius:8px;padding:8px 10px">
-          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">قيمة الأعمال</div>
-          <div style="font-size:15px;font-weight:800;color:var(--success)">${fmt(d.val)}</div>
-          ${d.vat>0?`<div style="font-size:10px;color:var(--primary-light)">+ VAT: ${fmt(d.vat)}</div>`:''}
-        </div>
-        <div style="background:var(--bg3);border-radius:8px;padding:8px 10px;text-align:left">
-          <div style="font-size:10px;color:var(--text3);margin-bottom:2px">الصافي المستحق</div>
-          <div style="font-size:15px;font-weight:800;color:var(--primary-light)">${fmt(d.net)}</div>
-          ${d.vat>0?`<div style="font-size:10px;color:var(--text3)">بدون VAT: ${fmt(d.net-d.vat)}</div>`:''}
-        </div>
-      </div>
-      ${hasDeds?`<div style="background:var(--danger-light);border-radius:8px;padding:8px 10px;border-right:3px solid var(--danger)">
-        <div style="font-size:10px;font-weight:700;color:var(--danger);margin-bottom:5px">الخصومات</div>
-        ${d.workWarranty>0?`<div class="adm-deduction-row"><span>ضمان الأعمال (${e.deduction||0}%)</span><span style="color:var(--danger)">- ${fmt(d.workWarranty)}</span></div>`:''}
-        ${d.execRetention>0?`<div class="adm-deduction-row"><span>ضمان التنفيذ-أمر (${a.retention||0}%)</span><span style="color:var(--danger)">- ${fmt(d.execRetention)}</span></div>`:''}
-        ${(d.contractGuaranteeDeduct||0)>0?`<div class="adm-deduction-row"><span>ضمان التنفيذ-عقد</span><span style="color:var(--danger)">- ${fmt(d.contractGuaranteeDeduct)}</span></div>`:''}
-        ${d.socialIns>0?`<div class="adm-deduction-row"><span>تأمينات (${e.socialIns||0}%)</span><span style="color:var(--danger)">- ${fmt(d.socialIns)}</span></div>`:''}
-        ${d.irregular>0?`<div class="adm-deduction-row"><span>عمالة غير منتظمة (${e.irregular||0}%)</span><span style="color:var(--danger)">- ${fmt(d.irregular)}</span></div>`:''}
-        ${d.stamps>0?`<div class="adm-deduction-row"><span>دمغات (${e.stamps||0}%)</span><span style="color:var(--danger)">- ${fmt(d.stamps)}</span></div>`:''}
-        ${d.tax>0?`<div class="adm-deduction-row"><span>ضريبة أرباح (${e.tax||0}%)</span><span style="color:var(--danger)">- ${fmt(d.tax)}</span></div>`:''}
-        <div class="adm-deduction-row" style="border-top:1px dashed rgba(220,38,38,0.3);margin-top:4px;padding-top:4px;font-weight:700">
-          <span style="color:var(--danger)">إجمالي الخصومات</span>
-          <span style="color:var(--danger)">- ${fmt(d.totalDed)}</span>
-        </div>
-      </div>`:''}
-    </div>`;
-  }).join(''):`<div class="empty-state" style="padding:30px"><div class="empty-icon">🧾</div><h3>لا توجد مستخلصات بعد</h3></div>`;
+  // Build the assignment's own quantities table (per item: assigned qty, price,
+  // total value, extracted-to-date, remaining, completion %) — reuses the same
+  // item-matching approach already used in the extract editor's cumulative-qty logic.
+  const itemsTableHtml=(a.items||[]).length?`
+    <div class="table-wrap"><table class="boq-table">
+      <thead><tr><th>#</th><th>WBS</th><th>الوصف</th><th>الوحدة</th><th>الكمية المسندة</th><th>السعر</th><th>الإجمالي</th><th>المنجز</th><th>المتبقي</th><th>الإنجاز</th></tr></thead>
+      <tbody>${a.items.map((it,i)=>{
+        const extractedQty=extracts.reduce((s,e)=>{
+          const eItems=e.items||[];
+          let ei=eItems[i];
+          if(!ei||(it.desc&&ei.desc&&ei.desc!==it.desc)){
+            const byDesc=eItems.find(x=>x.desc&&it.desc&&x.desc===it.desc);
+            const byWbs=it.wbs?eItems.find(x=>x.wbs&&x.wbs===it.wbs):null;
+            ei=byDesc||byWbs||null;
+          }
+          if(!ei)return s;
+          let pq;
+          if(ei.periodQty!=null&&ei.periodQty!==''&&!isNaN(parseFloat(ei.periodQty))){
+            pq=parseFloat(ei.periodQty);
+          }else if(ei.currentQty!=null&&ei.prevQty!=null){
+            pq=Math.max(0,(parseFloat(ei.currentQty)||0)-(parseFloat(ei.prevQty)||0));
+          }else{
+            pq=0;
+          }
+          return s+pq;
+        },0);
+        const assignQty=parseFloat(it.assignQty)||0;
+        const price=parseFloat(it.price)||0;
+        const total=assignQty*price;
+        const remaining=Math.max(0,assignQty-extractedQty);
+        const pctItem=assignQty>0?Math.min(100,Math.round(extractedQty/assignQty*100)):0;
+        return`<tr>
+          <td style="text-align:center;color:var(--text3)">${i+1}</td>
+          <td><span class="wbs-code">${it.wbs||'—'}</span></td>
+          <td>${it.desc||'—'}</td>
+          <td style="text-align:center">${it.unit||'—'}</td>
+          <td style="text-align:center">${assignQty.toLocaleString('ar-EG')}</td>
+          <td style="text-align:center;color:var(--text2)">${fmt(price)}</td>
+          <td style="text-align:center;color:var(--accent);font-weight:600">${fmt(total)}</td>
+          <td style="text-align:center;color:var(--success);font-weight:600">${extractedQty.toLocaleString('ar-EG')}</td>
+          <td style="text-align:center;color:${remaining>0?'var(--warning)':'var(--success)'}">${remaining>0?remaining.toLocaleString('ar-EG'):'✅'}</td>
+          <td style="text-align:center">
+            <div style="display:flex;align-items:center;gap:5px;justify-content:center">
+              <div style="width:50px;height:6px;background:var(--bg4);border-radius:3px"><div style="height:100%;border-radius:3px;background:${pctItem>=80?'var(--success)':pctItem>=50?'var(--primary-light)':'var(--warning)'};width:${pctItem}%"></div></div>
+              <span style="font-size:12px;font-weight:700;color:${pctItem>=80?'var(--success)':pctItem>=50?'var(--primary-light)':'var(--warning)'}">${pctItem}%</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr style="background:var(--bg3);font-weight:700">
+        <td colspan="6" style="text-align:right;padding:10px">الإجمالي</td>
+        <td style="text-align:center;color:var(--accent)">${fmt(val)}</td>
+        <td colspan="3"></td>
+      </tr></tfoot>
+    </table></div>`
+    :`<div class="empty-state" style="padding:30px"><div class="empty-icon">📋</div><h3>لا توجد بنود مسجّلة على هذا الأمر</h3></div>`;
 
   document.getElementById('adm_title').textContent=`أمر الإسناد — ${a.num}`;
   document.getElementById('adm_sub').textContent=`${c?.num||'—'} · ${a.desc||''} · ${a.status}`;
@@ -3273,13 +3288,14 @@ function openAssignmentDetails(id){
       </div>
     </div>
 
-    <!-- Extracts Timeline -->
+    <!-- جدول كميات الأمر -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:700;color:var(--text)">المستخلصات (${extracts.length})</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text)">جدول كميات الأمر (${(a.items||[]).length} بند)</div>
       <button class="btn btn-primary btn-sm" onclick="closeModal('assignDetailModal');openExtractModal()">+ مستخلص جديد</button>
     </div>
-    ${extractsHtml}`;
+    ${itemsTableHtml}`;
 
+  document.getElementById('assignDetailsEditBtn').onclick=()=>{closeModal('assignDetailModal');editAssignment(id);};
   openModal('assignDetailModal');
 }
 
