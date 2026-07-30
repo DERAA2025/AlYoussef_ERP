@@ -1800,8 +1800,11 @@ function wbsSortedList(){
     (byParent[p]=byParent[p]||[]).push(w);
   });
   const out=[];
+  const visited=new Set(); // guards against any circular/self-referencing parentCode
   function walk(parentCode,depth){
     (byParent[parentCode]||[]).forEach(w=>{
+      if(visited.has(w.id))return;
+      visited.add(w.id);
       out.push({...w,depth});
       walk(w.code,depth+1);
     });
@@ -1844,6 +1847,14 @@ function ensureWbsHierarchy(){
   legacy.forEach(w=>{
     const catName=(w.cat||'').trim();
     const derivedCode=(w.code||'').includes('.')?w.code.split('.')[0]:(catName||w.code||'GEN');
+    // Never let a code become its own parent — a legacy code with no dot and
+    // no distinct category would otherwise derive itself as its own parent,
+    // creating a self-referencing entry.
+    if(derivedCode===w.code){
+      w.level=1;
+      w.parentCode='';
+      return;
+    }
     if(!db.wbsCodes.some(x=>x.level===1&&x.code===derivedCode)){
       db.wbsCodes.push({id:uid(),code:derivedCode,desc:catName||derivedCode,level:1,parentCode:''});
     }
@@ -1851,6 +1862,44 @@ function ensureWbsHierarchy(){
     w.parentCode=derivedCode;
   });
   save();
+}
+
+// Repairs any WBS hierarchy corruption already saved to disk from before the
+// self-reference bug above was fixed: a code that ended up as its own parent
+// (or part of a longer cycle), and any duplicate code strings that resulted
+// from it. Safe to run on every load — it only acts when it finds a problem.
+function repairWbsHierarchy(){
+  let changed=false;
+
+  db.wbsCodes.forEach(w=>{
+    if(w.parentCode&&w.parentCode===w.code){
+      w.parentCode='';w.level=1;changed=true;
+    }
+  });
+
+  db.wbsCodes.forEach(w=>{
+    const seen=new Set([w.id]);
+    let cur=w,guard=0;
+    while(cur.parentCode&&guard++<20){
+      const parent=db.wbsCodes.find(x=>x.code===cur.parentCode);
+      if(!parent)break;
+      if(seen.has(parent.id)){w.parentCode='';w.level=1;changed=true;break;}
+      seen.add(parent.id);cur=parent;
+    }
+  });
+
+  const byCode={};
+  db.wbsCodes.forEach(w=>{(byCode[w.code]=byCode[w.code]||[]).push(w);});
+  Object.values(byCode).forEach(group=>{
+    if(group.length<2)return;
+    const hasChildren=w=>db.wbsCodes.some(x=>x.parentCode===w.code&&x.id!==w.id);
+    const keep=group.find(hasChildren)||group[0];
+    group.forEach(w=>{
+      if(w.id!==keep.id){db.wbsCodes=db.wbsCodes.filter(x=>x.id!==w.id);changed=true;}
+    });
+  });
+
+  if(changed)save();
 }
 
 const CURRENCY='ج.م';
@@ -3148,7 +3197,6 @@ function renderAssignments(q=''){
       </div>
       <div class="assign-tile-footer">
         <button class="btn btn-primary btn-sm" onclick="openAssignmentDetails('${a.id}')">🔍 عرض</button>
-        <button class="btn btn-ghost btn-sm" onclick="editAssignment('${a.id}')">✏️</button>
         <button class="btn btn-xs btn-danger" onclick="deleteAssignment('${a.id}')">🗑️</button>
       </div>
     </div>`;
@@ -6057,6 +6105,7 @@ function repairExtractValues(){
 (async()=>{
 await load();
 ensureWbsHierarchy();
+repairWbsHierarchy();
 // Auto-repair: fix periodQty for all extracts chronologically (silent)
 (()=>{
   let repaired=false;
