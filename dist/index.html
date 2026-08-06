@@ -804,6 +804,13 @@ textarea{resize:vertical;min-height:80px;}
             <span id="as_retention_contract_hint" style="font-size:11px;color:var(--primary-glow);margin-top:3px"></span>
             <span style="font-size:11px;color:var(--text3);margin-top:3px">قيمة الضمان المطلوب سدادها = هذه النسبة × قيمة الأمر</span>
           </div>
+          <div class="form-group">
+            <label>القيمة الأساسية لحساب الضمان
+              <button type="button" class="btn btn-xs btn-ghost" style="margin-right:4px" onclick="resetRetentionBaseToCurrentValue()">↺ تصفير لقيمة الأمر الحالية</button>
+            </label>
+            <input type="number" id="as_retention_base" placeholder="0.00">
+            <span id="as_retention_base_hint" style="font-size:11px;margin-top:3px"></span>
+          </div>
           <div class="form-group" id="as_retention_method_group">
             <label>طريقة سداد ضمان التنفيذ</label>
             <select id="as_retention_method" onchange="toggleRetentionPaymentFields()">
@@ -1461,11 +1468,12 @@ async function saveAllToDb(dbObj){
       await dbExecute(
         `INSERT INTO assignments (id,num,contract_id,desc,start,end,status,notes,retention,
           retention_final,warranty_months,vat,retention_method,retention_instrument,
-          retention_ref,retention_due_days,retention_paid_status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          retention_ref,retention_due_days,retention_paid_status,retention_base_value)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [a.id,a.num,a.contractId,a.desc,a.start,a.end,a.status,a.notes,a.retention,
          a.retentionFinal,a.warrantyMonths,a.vat,a.retentionMethod,a.retentionInstrument,
-         a.retentionRef,a.retentionDueDays,a.retentionPaidStatus]);
+         a.retentionRef,a.retentionDueDays,a.retentionPaidStatus,
+         a.retentionBaseValue!=null?a.retentionBaseValue:null]);
       let i=0;
       for(const it of a.items||[]){
         await dbExecute(
@@ -1586,6 +1594,7 @@ async function loadAllFromDb(target){
     notes:a.notes,retention:a.retention,retentionFinal:a.retention_final,warrantyMonths:a.warranty_months,
     vat:a.vat,retentionMethod:a.retention_method,retentionInstrument:a.retention_instrument,
     retentionRef:a.retention_ref,retentionDueDays:a.retention_due_days,retentionPaidStatus:a.retention_paid_status,
+    retentionBaseValue:a.retention_base_value,
     items:assignItems.filter(it=>it.assignment_id===a.id).map(it=>({wbs:it.wbs,desc:it.desc,unit:it.unit,assignQty:it.assign_qty,price:it.price}))
   }));
 
@@ -1902,6 +1911,23 @@ function repairWbsHierarchy(){
   if(changed)save();
 }
 
+// One-time, idempotent migration: locks in each assignment's CURRENT value as
+// its retention/guarantee calculation base, for any assignment that doesn't
+// have one yet. This changes nothing numerically today (the base starts out
+// equal to the live value) — it only freezes that number against later edits
+// to the assignment's items, which is the whole point: guarantee amounts
+// already withheld in reality must not silently change afterward.
+function ensureAssignmentRetentionBase(){
+  let changed=false;
+  db.assignments.forEach(a=>{
+    if(a.retentionBaseValue==null||a.retentionBaseValue===''){
+      a.retentionBaseValue=assignmentValue(a);
+      changed=true;
+    }
+  });
+  if(changed)save();
+}
+
 const CURRENCY='ج.م';
 function fmt(n){n=parseFloat(n)||0;return n.toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+CURRENCY;}
 function fmtS(n){n=parseFloat(n)||0;if(Math.abs(n)>=1e9)return(n/1e9).toFixed(2)+' مليار '+CURRENCY;if(Math.abs(n)>=1e6)return(n/1e6).toFixed(2)+' مليون '+CURRENCY;if(Math.abs(n)>=1e3)return n.toLocaleString('ar-EG',{maximumFractionDigits:0})+' '+CURRENCY;return n.toLocaleString('ar-EG',{maximumFractionDigits:0})+' '+CURRENCY;}
@@ -1954,7 +1980,7 @@ function getAssignmentRetentionBalance(assignId, beforeExtractId){
   if(!retPct)return 0;
   if((a.retentionMethod||'advance')==='advance')return 0;
   const vatPct=parseFloat(a.vat)||0;
-  const totalRetention=assignmentValue(a)*(1+vatPct/100)*retPct/100;
+  const totalRetention=assignmentRetentionBaseValue(a)*(1+vatPct/100)*retPct/100;
   // Sum retention already deducted in previous non-rejected extracts (chronologically before this one)
   const prevExtracts=db.extracts
     .filter(x=>x.assignId===assignId&&x.status!=='مرفوض'&&x.id!==beforeExtractId)
@@ -2046,9 +2072,28 @@ function assignmentTotalRetained(assignId){
   if(!retPct)return 0;
   if((a.retentionMethod||'advance')==='advance'){
     // Retained via upfront instrument, not via extracts
-    return a.retentionPaidStatus==='paid'?(assignmentValue(a)*retPct/100):0;
+    return a.retentionPaidStatus==='paid'?(assignmentRetentionBaseValue(a)*retPct/100):0;
   }
   return db.extracts.filter(e=>e.assignId===assignId&&e.status!=='مرفوض').reduce((s,e)=>s+extractRetentionAmount(e),0);
+}
+// Same total as assignmentTotalRetained(), with VAT stripped out — needed because
+// the two retention methods carry VAT differently: 'deduct_first' amounts are
+// computed VAT-inclusive (against value+VAT), while 'advance' amounts never had
+// VAT applied to begin with. Reports that need a VAT-exclusive "retained" figure
+// (e.g. the P&L tab) should sum this per assignment rather than only summing
+// what happened to be deducted through an extract — an 'advance'-method
+// assignment's retention never shows up on any extract at all otherwise.
+function assignmentRetainedWithoutVat(a){
+  if(!a)return 0;
+  const retPct=parseFloat(a.retention)||0;
+  if(!retPct)return 0;
+  if((a.retentionMethod||'advance')==='advance'){
+    return a.retentionPaidStatus==='paid'?(assignmentRetentionBaseValue(a)*retPct/100):0;
+  }
+  const vatPct=parseFloat(a.vat)||0;
+  const vatFactor=1+vatPct/100;
+  const totalWithVat=assignmentTotalRetained(a.id);
+  return vatFactor>0?totalWithVat/vatFactor:totalWithVat;
 }
 
 // Live calculator in extract modal
@@ -2131,6 +2176,18 @@ function assignmentValue(a){
   if(!a)return 0;
   if(a.items&&a.items.length)return a.items.reduce((s,it)=>s+(parseFloat(it.assignQty)||0)*(parseFloat(it.price)||0),0);
   return parseFloat(a.value)||0;
+}
+// The value guarantee/retention percentages are calculated against. This is
+// deliberately SEPARATE from the assignment's live current value: once a
+// guarantee amount has actually been withheld against an assignment's value,
+// later editing that assignment's items (quantities/prices) must not
+// retroactively change what was already withheld. If no base has been set
+// yet, falls back to the live value (matches old behavior exactly, so
+// nothing changes for assignments nobody has locked a base value for).
+function assignmentRetentionBaseValue(a){
+  if(!a)return 0;
+  if(a.retentionBaseValue!=null&&a.retentionBaseValue!=='')return parseFloat(a.retentionBaseValue)||0;
+  return assignmentValue(a);
 }
 function extractValue(e){
   if(!e)return 0;
@@ -3212,7 +3269,8 @@ function openAssignmentDetails(id){
   const valWithVat=val*(1+vatPct/100);
   const extracts=db.extracts.filter(e=>e.assignId===id&&e.status!=='مرفوض').sort((x,y)=>(x.date||'').localeCompare(y.date||''));
   const retPct=parseFloat(a.retention)||0;
-  const retTotal=valWithVat*retPct/100;
+  const retBaseWithVat=assignmentRetentionBaseValue(a)*(1+vatPct/100);
+  const retTotal=retBaseWithVat*retPct/100;
   const retained=assignmentTotalRetained(id);
   const retRemaining=Math.max(0,retTotal-retained);
 
@@ -3370,6 +3428,8 @@ function openAssignmentModal(id=null){
       document.getElementById('as_retention_ref').value=a.retentionRef||'';
       document.getElementById('as_retention_due_days').value=a.retentionDueDays||15;
       document.getElementById('as_retention_paid_status').value=a.retentionPaidStatus||'pending';
+      document.getElementById('as_retention_base').value=(a.retentionBaseValue!=null&&a.retentionBaseValue!=='')?a.retentionBaseValue:assignmentValue(a);
+      updateRetentionBaseHint(assignmentValue(a));
       toggleRetentionPaymentFields();
       // Show contract's original retention % for reference
       const editC=db.contracts.find(c=>c.id===a.contractId);
@@ -3397,6 +3457,9 @@ function openAssignmentModal(id=null){
     document.getElementById('as_retention_ref').value='';
     document.getElementById('as_retention_due_days').value=15;
     document.getElementById('as_retention_paid_status').value='pending';
+    document.getElementById('as_retention_base').value='';
+    document.getElementById('as_retention_base_hint').textContent='سيُحدَّد تلقائيًا = قيمة الأمر عند الحفظ ما لم تُدخل قيمة مختلفة';
+    document.getElementById('as_retention_base_hint').style.color='var(--text3)';
     toggleRetentionPaymentFields();
     document.getElementById('assignItemsBody').innerHTML='';
     document.getElementById('boqSelectorSection').style.display='none';
@@ -3672,6 +3735,30 @@ function updateAssignItemsTotal(){
     const el=tr.querySelector('.as-lt');if(el)el.textContent=fmt(lt);
   });
   document.getElementById('assignItemsTotal').textContent=fmt(t);
+  updateRetentionBaseHint(t);
+}
+function updateRetentionBaseHint(liveVal){
+  const hintEl=document.getElementById('as_retention_base_hint');
+  const baseInput=document.getElementById('as_retention_base');
+  if(!hintEl||!baseInput)return;
+  if(!baseInput.value){
+    hintEl.textContent='سيُحدَّد تلقائيًا = قيمة الأمر عند الحفظ ما لم تُدخل قيمة مختلفة';
+    hintEl.style.color='var(--text3)';
+    return;
+  }
+  const baseVal=parseFloat(baseInput.value)||0;
+  if(Math.abs(liveVal-baseVal)<0.01){
+    hintEl.textContent=`مطابقة لقيمة الأمر الحالية (${fmt(liveVal)})`;
+    hintEl.style.color='var(--text3)';
+  }else{
+    hintEl.textContent=`⚠️ مختلفة عن قيمة الأمر الحالية (${fmt(liveVal)}) — الضمان هيتحسب على القيمة المدخلة هنا فقط`;
+    hintEl.style.color='var(--warning)';
+  }
+}
+function resetRetentionBaseToCurrentValue(){
+  const liveVal=getAssignItems().reduce((s,it)=>s+(parseFloat(it.assignQty)||0)*(parseFloat(it.price)||0),0);
+  document.getElementById('as_retention_base').value=liveVal.toFixed(2);
+  updateRetentionBaseHint(liveVal);
 }
 function getAssignItems(){
   return Array.from(document.querySelectorAll('#assignItemsBody tr')).map(tr=>{
@@ -3694,6 +3781,9 @@ function saveAssignment(){
     }
   });
   if(hasError){toast('⚠️ بعض الكميات تتجاوز الحد المتاح من العقد — يرجى التصحيح','error');return;}
+  const items=getAssignItems();
+  const retentionBaseInput=document.getElementById('as_retention_base').value;
+  const retentionBaseValue=retentionBaseInput!==''?(parseFloat(retentionBaseInput)||0):items.reduce((s,it)=>s+(parseFloat(it.assignQty)||0)*(parseFloat(it.price)||0),0);
   const obj={
     num,contractId:cid,
     desc:document.getElementById('as_desc').value,
@@ -3702,6 +3792,7 @@ function saveAssignment(){
     status:document.getElementById('as_status').value,
     notes:document.getElementById('as_notes').value,
     retention:parseFloat(document.getElementById('as_retention').value)||0,
+    retentionBaseValue,
     retentionFinal:parseFloat(document.getElementById('as_retention_final').value)||50,
     warrantyMonths:parseInt(document.getElementById('as_warranty_months').value)||12,
     vat:parseFloat(document.getElementById('as_vat').value)||0,
@@ -3710,7 +3801,7 @@ function saveAssignment(){
     retentionRef:document.getElementById('as_retention_ref').value,
     retentionDueDays:parseInt(document.getElementById('as_retention_due_days').value)||15,
     retentionPaidStatus:document.getElementById('as_retention_paid_status').value,
-    items:getAssignItems()
+    items
   };
   if(editId)Object.assign(db.assignments.find(a=>a.id===editId),obj);
   else db.assignments.push({id:uid(),...obj});
@@ -3889,8 +3980,8 @@ function loadAssignItemsForExtract(){
   // Show retention info based on payment method
   if(a&&(a.retention||0)>0){
     const retPct=a.retention||0;
-    const assignVal=assignmentValue(a);
-    const totalRetention=assignVal*retPct/100;
+    const retBaseVal=assignmentRetentionBaseValue(a);
+    const totalRetention=retBaseVal*retPct/100;
     const retainFinalPct=a.retentionFinal||50;
     const warrantyMonths=a.warrantyMonths||12;
     const method=a.retentionMethod||'advance';
@@ -5381,19 +5472,19 @@ function renderRepGuarantees(){
   });
   const totalExecRetAll=assignsInScope.filter(a=>(a.retention||0)>0).reduce((s,a)=>{
     const vatPct=parseFloat(a.vat)||0;
-    return s+assignmentValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
+    return s+assignmentRetentionBaseValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
   },0);
   // المخصوم فعلاً من المستخلصات (deduct_first فقط)
   const totalExecRetDeducted=extracts.reduce((s,e)=>s+(extractAllDeductions(e).execRetention||0),0);
   // المدفوع مقدماً (advance — خارج المستخلصات)
   const totalExecRetAdvance=assignsInScope.filter(a=>(a.retention||0)>0&&(a.retentionMethod||'advance')==='advance'&&a.retentionPaidStatus==='paid').reduce((s,a)=>{
     const vatPct=parseFloat(a.vat)||0;
-    return s+assignmentValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
+    return s+assignmentRetentionBaseValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
   },0);
   // المتبقي (لم يُحصَّل بعد)
   const totalExecRetPending=assignsInScope.filter(a=>(a.retention||0)>0).reduce((s,a)=>{
     const vatPct=parseFloat(a.vat)||0;
-    const total=assignmentValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
+    const total=assignmentRetentionBaseValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
     const retained=assignmentTotalRetained(a.id);
     return s+Math.max(0,total-retained);
   },0);
@@ -5476,7 +5567,7 @@ function renderRepGuarantees(){
           const c=db.contracts.find(c=>c.id===a.contractId);
           if(contracts.length&&!contracts.find(cc=>cc.id===a.contractId))return'';
           const vatPct=parseFloat(a.vat)||0;
-          const total=assignmentValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
+          const total=assignmentRetentionBaseValue(a)*(1+vatPct/100)*(parseFloat(a.retention)||0)/100;
           const retained=assignmentTotalRetained(a.id);
           const rem=Math.max(0,total-retained);
           const isPaid=(a.retentionMethod||'advance')==='advance'&&a.retentionPaidStatus==='paid';
@@ -5535,22 +5626,20 @@ function renderRepPL(){
   const el=document.getElementById('repPLContent');
   const contracts=getFilteredContracts();
   const extracts=getFilteredExtracts();
+  const filteredAssigns=db.assignments.filter(a=>contracts.find(c=>c.id===a.contractId));
 
   const revenue=extracts.reduce((s,e)=>{const d=extractAllDeductions(e);return s+(d.net-d.vat);},0);
-  // المحتجز بدون VAT: execRetention محسوب على valWithVat فنطرح منه VAT
-  const retained=extracts.reduce((s,e)=>{
+  // المحتجز بدون VAT = ضمان كل أمر إسناد (بالطريقتين: مقدم أو مخصوم من مستخلص)
+  // + ضمان العقد لو اتخصم من مستخلص محدد ضمن المستخلصات المفلترة
+  const assignRetained=filteredAssigns.reduce((s,a)=>s+assignmentRetainedWithoutVat(a),0);
+  const contractGuaranteeRetained=extracts.reduce((s,e)=>{
     const d=extractAllDeductions(e);
     const vatPct=parseFloat(db.assignments.find(a=>a.id===e.assignId)?.vat)||0;
     const vatFactor=1+vatPct/100;
-    // نحول الضمان من شامل VAT إلى قبل VAT
-    const execRet=vatFactor>1?(d.execRetention||0)/vatFactor:(d.execRetention||0);
-    const contractRet=vatFactor>1?(d.contractGuaranteeDeduct||0)/vatFactor:(d.contractGuaranteeDeduct||0);
-    return s+execRet+contractRet;
+    return s+(vatFactor>0?(d.contractGuaranteeDeduct||0)/vatFactor:(d.contractGuaranteeDeduct||0));
   },0);
+  const retained=assignRetained+contractGuaranteeRetained;
   const totalCollected=revenue+retained;
-
-  // الأوامر المفلترة فقط
-  const filteredAssigns=db.assignments.filter(a=>contracts.find(c=>c.id===a.contractId));
 
   // حساب التكاليف على الأوامر المفلترة فقط
   const filteredAssignIds=new Set(filteredAssigns.map(a=>a.id));
@@ -5579,14 +5668,13 @@ function renderRepPL(){
   const assignRows=filteredAssigns.map(a=>{
     const aes=extracts.filter(e=>e.assignId===a.id);
     const rev=aes.reduce((s,e)=>{const d=extractAllDeductions(e);return s+(d.net-d.vat);},0);
-    const ret=aes.reduce((s,e)=>{
+    const contractRetForAssign=aes.reduce((s,e)=>{
       const d=extractAllDeductions(e);
       const vatPct=parseFloat(a.vat)||0;
       const vatFactor=1+vatPct/100;
-      const execRet=vatFactor>1?(d.execRetention||0)/vatFactor:(d.execRetention||0);
-      const contractRet=vatFactor>1?(d.contractGuaranteeDeduct||0)/vatFactor:(d.contractGuaranteeDeduct||0);
-      return s+execRet+contractRet;
+      return s+(vatFactor>0?(d.contractGuaranteeDeduct||0)/vatFactor:(d.contractGuaranteeDeduct||0));
     },0);
+    const ret=assignmentRetainedWithoutVat(a)+contractRetForAssign;
     const col=rev+ret;
     const sub=(db.subPayments||[]).filter(p=>{const sc=db.subContracts.find(s=>s.id===p.contractId);return sc&&sc.assignId===a.id;}).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
     const pur=db.purchases.filter(p=>p.chargeType==='assignment'&&p.chargeRef===a.id).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
@@ -6106,6 +6194,7 @@ function repairExtractValues(){
 await load();
 ensureWbsHierarchy();
 repairWbsHierarchy();
+ensureAssignmentRetentionBase();
 // Auto-repair: fix periodQty for all extracts chronologically (silent)
 (()=>{
   let repaired=false;

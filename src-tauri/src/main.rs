@@ -56,6 +56,12 @@ fn main() {
             sql: include_str!("../migrations/002_wbs_hierarchy.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "retention_base",
+            sql: include_str!("../migrations/003_retention_base.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
