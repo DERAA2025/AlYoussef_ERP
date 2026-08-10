@@ -3675,9 +3675,9 @@ function renderAssignItemsEditor(items,contractId){
       <td><input type="text" value="${it.desc||''}" style="min-width:150px"></td>
       <td><input type="text" value="${it.unit||''}" style="width:55px"></td>
       <td style="text-align:center;color:var(--text3)">${availableLabel}</td>
-      <td><input type="number" class="as-qty" value="${Math.min(it.assignQty||0,maxQty)}" min="0" oninput="updateAssignItemsTotal()" style="width:80px" ${maxQty===0?'disabled style="opacity:0.4"':''}  data-maxqty="${maxQty}"></td>
+      <td><input type="number" class="as-qty" value="${it.assignQty||0}" min="0" oninput="updateAssignItemsTotal()" style="width:80px;${(maxQty>0&&maxQty<999999&&(parseFloat(it.assignQty)||0)>maxQty)?'border-color:var(--danger)':''}" ${maxQty===0?'disabled style="opacity:0.4"':''}  data-maxqty="${maxQty}" title="${(maxQty>0&&maxQty<999999&&(parseFloat(it.assignQty)||0)>maxQty)?'⚠️ يتجاوز الحد المتاح من العقد ('+maxQty+') — راجع الكمية':''}"></td>
       <td><input type="number" class="as-price" value="${it.price||0}" min="0" oninput="updateAssignItemsTotal()" style="width:90px"></td>
-      <td class="as-lt" style="color:var(--accent)">${fmt((Math.min(it.assignQty||0,maxQty))*(it.price||0))}</td>
+      <td class="as-lt" style="color:var(--accent)">${fmt((it.assignQty||0)*(it.price||0))}</td>
       <td><button class="btn btn-xs btn-danger" onclick="this.closest('tr').remove();updateAssignItemsTotal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>`;
     tr.dataset.cqty=maxQty;
     tr.dataset.contractPrice=it.price||0;
@@ -3706,9 +3706,8 @@ function updateAssignItemsTotal(){
     const maxQty=parseFloat(tr.dataset.cqty)||0;
     if(maxQty>0&&maxQty<999999&&qtyInput){
       if(qty>maxQty){
-        qtyInput.value=maxQty;
         qtyInput.style.borderColor='var(--danger)';
-        qtyInput.title=`الحد الأقصى: ${maxQty}`;
+        qtyInput.title=`⚠️ يتجاوز الحد المتاح من العقد (${maxQty}) — راجع الكمية`;
       }else{
         qtyInput.style.borderColor=qty===maxQty?'var(--warning)':'';
         qtyInput.title='';
