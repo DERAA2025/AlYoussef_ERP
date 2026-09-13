@@ -6,7 +6,9 @@ const dbFile = '/tmp/mapping-test.db';
 if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
 const sdb = new DatabaseSync(dbFile);
 sdb.exec('PRAGMA foreign_keys = ON;');
-sdb.exec(fs.readFileSync(__dirname + '/001_initial.sql', 'utf8'));
+sdb.exec(fs.readFileSync(__dirname + '/../src-tauri/migrations/001_initial.sql', 'utf8'));
+sdb.exec(fs.readFileSync(__dirname + '/../src-tauri/migrations/002_wbs_hierarchy.sql', 'utf8'));
+sdb.exec(fs.readFileSync(__dirname + '/../src-tauri/migrations/003_retention_base.sql', 'utf8'));
 
 // ---- dbExecute/dbSelect implementations backed by node:sqlite ----
 async function dbExecute(query, values = []) {
@@ -61,7 +63,7 @@ const sample = {
       id: 'as1', num: 'ASN-001', contractId: 'co1', desc: 'حفر الأساسات', start: '2026-01-05', end: '2026-03-01',
       status: 'جارٍ', notes: '', retention: 5, retentionFinal: 50, warrantyMonths: 12, vat: 14,
       retentionMethod: 'deduct_first', retentionInstrument: 'cash', retentionRef: '', retentionDueDays: 15,
-      retentionPaidStatus: 'pending',
+      retentionPaidStatus: 'pending', retentionBaseValue: 20000, // deliberately != live value (500*50=25000)
       items: [
         { wbs: 'A.01', desc: 'حفر', unit: 'م3', assignQty: 500, price: 50 },
       ],
@@ -107,7 +109,9 @@ const sample = {
     { id: 'spy1', supplierId: 'sup1', date: '2026-01-25', amount: 100000, method: 'تحويل بنكي', ref: 'REF1', notes: '' },
   ],
   wbsCodes: [
-    { id: 'w1', code: 'A.01', desc: 'أعمال الحفر والردم', cat: 'أعمال ترابية' },
+    { id: 'w1', code: 'A', desc: 'أعمال مدنية', cat: '', level: 1, parentCode: '' },
+    { id: 'w2', code: 'A.01', desc: 'أعمال الحفر والردم', cat: 'أعمال ترابية', level: 2, parentCode: 'A' },
+    { id: 'w3', code: 'A.01.01', desc: 'حفر يدوي', cat: '', level: 3, parentCode: 'A.01' },
   ],
   company: { name: 'اليوسف للمقاولات', reg: '12345', phone: '', address: '' },
 };
@@ -139,7 +143,7 @@ const sample = {
       'guaranteeType', 'guaranteeMethod', 'guaranteeStatus', 'guaranteeAssignId', 'guaranteeExtractId', 'desc']);
   compareEntity('annexes', sample.annexes, reloaded.annexes, ['contractId', 'num', 'type', 'date', 'value', 'status']);
   compareEntity('assignments', sample.assignments, reloaded.assignments,
-    ['num', 'contractId', 'desc', 'status', 'retention', 'retentionFinal', 'warrantyMonths', 'vat', 'retentionMethod']);
+    ['num', 'contractId', 'desc', 'status', 'retention', 'retentionFinal', 'warrantyMonths', 'vat', 'retentionMethod', 'retentionBaseValue']);
   compareEntity('extracts', sample.extracts, reloaded.extracts,
     ['num', 'assignId', 'type', 'status', 'deduction', 'socialIns', 'irregular', 'stamps', 'tax', 'value', 'completion']);
   compareEntity('subcontractors', sample.subcontractors, reloaded.subcontractors, ['name', 'spec']);
@@ -148,7 +152,7 @@ const sample = {
   compareEntity('suppliers', sample.suppliers, reloaded.suppliers, ['name', 'type']);
   compareEntity('purchases', sample.purchases, reloaded.purchases, ['supplierId', 'type', 'desc', 'amount', 'chargeType', 'chargeRef']);
   compareEntity('supplierPayments', sample.supplierPayments, reloaded.supplierPayments, ['supplierId', 'date', 'amount', 'method']);
-  compareEntity('wbsCodes', sample.wbsCodes, reloaded.wbsCodes, ['code', 'desc', 'cat']);
+  compareEntity('wbsCodes', sample.wbsCodes, reloaded.wbsCodes, ['code', 'desc', 'cat', 'level', 'parentCode']);
 
   // ---- Nested items ----
   const co1 = reloaded.contracts.find(c => c.id === 'co1');
@@ -160,6 +164,11 @@ const sample = {
   const as1 = reloaded.assignments.find(a => a.id === 'as1');
   assert.strictEqual(as1.items.length, 1);
   assert.strictEqual(Number(as1.items[0].assignQty), 500);
+  // The whole point of the fix: the locked retention base (20000) must survive
+  // independently of the live item total (500*50=25000) — they must NOT be equal.
+  const liveTotal = as1.items.reduce((s, it) => s + Number(it.assignQty) * Number(it.price), 0);
+  assert.strictEqual(Number(as1.retentionBaseValue), 20000, 'retentionBaseValue did not round-trip correctly');
+  assert.notStrictEqual(Number(as1.retentionBaseValue), liveTotal, 'retentionBaseValue must stay independent of the live item total');
 
   const ex1 = reloaded.extracts.find(e => e.id === 'ex1');
   assert.strictEqual(ex1.items.length, 1);

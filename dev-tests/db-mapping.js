@@ -58,11 +58,12 @@ async function saveAllToDb(dbObj){
       await dbExecute(
         `INSERT INTO assignments (id,num,contract_id,desc,start,end,status,notes,retention,
           retention_final,warranty_months,vat,retention_method,retention_instrument,
-          retention_ref,retention_due_days,retention_paid_status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          retention_ref,retention_due_days,retention_paid_status,retention_base_value)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [a.id,a.num,a.contractId,a.desc,a.start,a.end,a.status,a.notes,a.retention,
          a.retentionFinal,a.warrantyMonths,a.vat,a.retentionMethod,a.retentionInstrument,
-         a.retentionRef,a.retentionDueDays,a.retentionPaidStatus]);
+         a.retentionRef,a.retentionDueDays,a.retentionPaidStatus,
+         a.retentionBaseValue!=null?a.retentionBaseValue:null]);
       let i=0;
       for(const it of a.items||[]){
         await dbExecute(
@@ -149,8 +150,8 @@ async function saveAllToDb(dbObj){
 
     // ---- wbs_codes ----
     for(const w of dbObj.wbsCodes||[])
-      await dbExecute(`INSERT INTO wbs_codes (id,code,desc,cat) VALUES (?,?,?,?)`,
-        [w.id,w.code,w.desc,w.cat]);
+      await dbExecute(`INSERT INTO wbs_codes (id,code,desc,cat,level,parent_code) VALUES (?,?,?,?,?,?)`,
+        [w.id,w.code,w.desc,w.cat,w.level,w.parentCode||null]);
 
     // ---- company_settings (singleton row) ----
     const co=dbObj.company||{};
@@ -191,6 +192,7 @@ async function loadAllFromDb(target){
     notes:a.notes,retention:a.retention,retentionFinal:a.retention_final,warrantyMonths:a.warranty_months,
     vat:a.vat,retentionMethod:a.retention_method,retentionInstrument:a.retention_instrument,
     retentionRef:a.retention_ref,retentionDueDays:a.retention_due_days,retentionPaidStatus:a.retention_paid_status,
+    retentionBaseValue:a.retention_base_value,
     items:assignItems.filter(it=>it.assignment_id===a.id).map(it=>({wbs:it.wbs,desc:it.desc,unit:it.unit,assignQty:it.assign_qty,price:it.price}))
   }));
 
@@ -235,7 +237,7 @@ async function loadAllFromDb(target){
   target.supplierPayments=supplierPayments.map(p=>({id:p.id,supplierId:p.supplier_id,date:p.date,amount:p.amount,method:p.method,ref:p.ref,notes:p.notes}));
 
   const wbsCodes=await dbSelect('SELECT * FROM wbs_codes');
-  target.wbsCodes=wbsCodes.map(w=>({id:w.id,code:w.code,desc:w.desc,cat:w.cat}));
+  target.wbsCodes=wbsCodes.map(w=>({id:w.id,code:w.code,desc:w.desc,cat:w.cat,level:w.level,parentCode:w.parent_code||''}));
 
   const company=await dbSelect('SELECT * FROM company_settings WHERE id=1');
   target.company=company.length?{name:company[0].name,reg:company[0].reg,phone:company[0].phone,address:company[0].address}:{name:'',reg:'',phone:'',address:''};

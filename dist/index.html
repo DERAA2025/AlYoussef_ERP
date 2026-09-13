@@ -522,7 +522,6 @@ textarea{resize:vertical;min-height:80px;}
       <button class="tab-btn" onclick="switchTab(this,'rep-guarantees')">🔒 الضمانات</button>
       <button class="tab-btn" onclick="switchTab(this,'rep-pl')">📈 الربح والخسارة</button>
       <button class="tab-btn" onclick="switchTab(this,'rep-sub')">👷 الباطن والموردون</button>
-      <button class="tab-btn" onclick="switchTab(this,'rep-wbs')">🗂️ WBS</button>
     </div>
     <div class="tab-content active" id="rep-dashboard"><div id="repDashContent"></div></div>
     <div class="tab-content" id="rep-cashflow"><div id="repCashflowContent"></div></div>
@@ -530,23 +529,21 @@ textarea{resize:vertical;min-height:80px;}
     <div class="tab-content" id="rep-guarantees"><div id="repGuaranteesContent"></div></div>
     <div class="tab-content" id="rep-pl"><div id="repPLContent"></div></div>
     <div class="tab-content" id="rep-sub"><div id="repSubContent"></div></div>
-    <div class="tab-content" id="rep-wbs"><div id="repWbsContent"></div></div>
   </div>
 
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab(this,'set-wbs')">رموز WBS</button>
-      <button class="tab-btn" onclick="switchTab(this,'set-company')">بيانات الشركة</button>
+      <button class="tab-btn active" onclick="switchTab(this,'set-company')">بيانات الشركة</button>
       <button class="tab-btn" onclick="switchTab(this,'set-data')">البيانات</button>
     </div>
-    <div class="tab-content active" id="set-wbs">
+    <div class="tab-content" id="set-wbs">
       <div class="card">
         <div class="card-header"><div><div class="card-title">رموز WBS</div><div class="card-sub">بنية تقسيم العمل — 3 مستويات (فئة رئيسية ← تصنيف ← بند تفصيلي)</div></div><button class="btn btn-primary btn-sm" onclick="addWBSRow(1,'')">+ إضافة فئة رئيسية</button></div>
         <div id="wbsTree"></div>
       </div>
     </div>
-    <div class="tab-content" id="set-company">
+    <div class="tab-content active" id="set-company">
       <div class="card">
         <div class="card-title" style="margin-bottom:20px">بيانات الشركة</div>
         <div class="form-grid">
@@ -602,24 +599,14 @@ textarea{resize:vertical;min-height:80px;}
   <div class="modal modal-lg">
     <div class="modal-header"><span class="modal-title" id="contractModalTitle">إضافة عقد جديد</span><button class="modal-close" onclick="closeModal('contractModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="modal-body">
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab(this,'ct-basic')">البيانات الأساسية</button>
-        <button class="tab-btn" onclick="switchTab(this,'ct-boq')">جدول الكميات (BOQ)</button>
-      </div>
       <div class="tab-content active" id="ct-basic">
         <div class="form-grid">
           <div class="form-group"><label>رقم العقد <span class="required-star">*</span></label><input type="text" id="co_num"></div>
           <div class="form-group"><label>العميل <span class="required-star">*</span></label><select id="co_client"></select></div>
-          <div class="form-group"><label>نوع العقد</label>
-            <select id="co_type" onchange="toggleContractType()">
-              <option value="itemized">نوع 1: كميات إجمالية (سعر × كمية)</option>
-              <option value="fixed">نوع 2: قيمة إجمالية (سعر وحدة — كمية في الأمر)</option>
-            </select>
-          </div>
+          <input type="hidden" id="co_type" value="fixed">
           <div class="form-group" id="co_value_group">
-            <label id="co_value_label">القيمة الإجمالية</label>
+            <label id="co_value_label">القيمة الإجمالية <span class="required-star">*</span></label>
             <input type="number" id="co_value" style="color:var(--accent)" placeholder="0.00">
-            <span id="co_value_hint" style="font-size:11px;color:var(--text3)"></span>
           </div>
           <div class="form-group"><label>تاريخ البداية</label><input type="date" id="co_start"></div>
           <div class="form-group"><label>تاريخ النهاية</label><input type="date" id="co_end"></div>
@@ -786,14 +773,11 @@ textarea{resize:vertical;min-height:80px;}
   <div class="modal modal-lg">
     <div class="modal-header"><span class="modal-title" id="assignmentModalTitle">أمر إسناد جديد</span><button class="modal-close" onclick="closeModal('assignmentModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="modal-body">
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab(this,'as-basic')">البيانات الأساسية</button>
-        <button class="tab-btn" onclick="switchTab(this,'as-items')">بنود الأمر</button>
-      </div>
       <div class="tab-content active" id="as-basic">
         <div class="form-grid">
           <div class="form-group"><label>رقم الأمر <span class="required-star">*</span></label><input type="text" id="as_num"></div>
           <div class="form-group"><label>العقد <span class="required-star">*</span></label><select id="as_contract" onchange="loadContractBOQForAssign()"></select></div>
+          <div class="form-group"><label>قيمة الأمر <span class="required-star">*</span></label><input type="number" id="as_value" style="color:var(--accent)" placeholder="0.00" oninput="updateRetentionBaseHint(parseFloat(this.value)||0)"></div>
           <div class="form-group"><label>الوصف</label><input type="text" id="as_desc"></div>
           <div class="form-group"><label>تاريخ البداية</label><input type="date" id="as_start"></div>
           <div class="form-group"><label>تاريخ النهاية المتوقع</label><input type="date" id="as_end"></div>
@@ -905,14 +889,12 @@ textarea{resize:vertical;min-height:80px;}
   <div class="modal modal-lg">
     <div class="modal-header"><span class="modal-title" id="extractModalTitle">مستخلص جديد</span><button class="modal-close" onclick="closeModal('extractModal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
     <div class="modal-body">
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab(this,'ex-basic')">البيانات الأساسية</button>
-        <button class="tab-btn" onclick="switchTab(this,'ex-items')">بنود المستخلص</button>
-      </div>
       <div class="tab-content active" id="ex-basic">
+        <div id="ex_assign_summary" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm)"></div>
         <div class="form-grid">
           <div class="form-group"><label>رقم المستخلص <span class="required-star">*</span></label><input type="text" id="ex_num"></div>
           <div class="form-group"><label>أمر الإسناد <span class="required-star">*</span></label><select id="ex_assign" onchange="loadAssignItemsForExtract()"></select></div>
+          <div class="form-group"><label>قيمة المستخلص (هذه الفترة) <span class="required-star">*</span></label><input type="number" id="ex_value" style="color:var(--accent)" placeholder="0.00" oninput="calcExtractDeductions()"></div>
           <div class="form-group"><label>النوع</label><select id="ex_type"><option>مرحلي</option><option>ختامي</option><option>مقدمة</option></select></div>
           <div class="form-group"><label>تاريخ التقديم</label><input type="date" id="ex_date"></div>
           <div class="form-group"><label>الحالة</label><select id="ex_status"><option>مقدم</option><option>معتمد</option><option>مدفوع جزئياً</option><option>مدفوع</option><option>مرفوض</option></select></div>
@@ -1928,6 +1910,39 @@ function ensureAssignmentRetentionBase(){
   if(changed)save();
 }
 
+// One-time, idempotent migration: per explicit decision, the system no longer
+// tracks line items/BOQ at the contract, assignment, or extract level — each
+// is now just a directly-entered value. For any existing record that still has
+// items, sum them into the record's plain value field (preserving every
+// pound of existing money) and drop the item-level breakdown. Safe to run on
+// every load — it only acts on records that still have items to consolidate.
+function ensureSimplifiedValues(){
+  let changed=false;
+  db.contracts.forEach(c=>{
+    if(c.type==='itemized'&&c.boq&&c.boq.length){
+      c.contractValue=c.boq.reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.price)||0),0);
+      c.boq=[];
+      c.type='fixed';
+      changed=true;
+    }
+  });
+  db.assignments.forEach(a=>{
+    if(a.items&&a.items.length){
+      a.value=assignmentValue(a);
+      a.items=[];
+      changed=true;
+    }
+  });
+  db.extracts.forEach(e=>{
+    if(e.items&&e.items.length){
+      e.value=extractValue(e);
+      e.items=[];
+      changed=true;
+    }
+  });
+  if(changed)save();
+}
+
 const CURRENCY='ج.م';
 function fmt(n){n=parseFloat(n)||0;return n.toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+CURRENCY;}
 function fmtS(n){n=parseFloat(n)||0;if(Math.abs(n)>=1e9)return(n/1e9).toFixed(2)+' مليار '+CURRENCY;if(Math.abs(n)>=1e6)return(n/1e6).toFixed(2)+' مليون '+CURRENCY;if(Math.abs(n)>=1e3)return n.toLocaleString('ar-EG',{maximumFractionDigits:0})+' '+CURRENCY;return n.toLocaleString('ar-EG',{maximumFractionDigits:0})+' '+CURRENCY;}
@@ -1940,15 +1955,7 @@ function supplierName(id){const s=db.suppliers.find(s=>s.id===id);return s?s.nam
 
 function contractTotalValue(c){
   if(!c)return 0;
-  // itemized: sum of qty*price per BOQ row
-  // fixed: manually entered contract ceiling value (stored in c.contractValue)
-  let base;
-  if(c.type==='itemized'){
-    base=(c.boq||[]).reduce((s,r)=>s+(parseFloat(r.qty)||0)*(parseFloat(r.price)||0),0);
-  }else{
-    // fixed type: contract ceiling is stored separately
-    base=parseFloat(c.contractValue)||0;
-  }
+  const base=parseFloat(c.contractValue)||0;
   const annexAdj=db.annexes.filter(a=>a.contractId===c.id&&a.status==='معتمد'&&a.type==='value').reduce((s,a)=>s+(parseFloat(a.value)||0),0);
   return base+annexAdj;
 }
@@ -2098,8 +2105,8 @@ function assignmentRetainedWithoutVat(a){
 
 // Live calculator in extract modal
 function calcExtractDeductions(){
-  // Get current extract value from items total
-  const itemsTotal=parseFloat(document.getElementById('extractItemsTotal')?.textContent?.replace(/[^0-9.]/g,'')||0)||0;
+  // Get current extract value from the direct value field
+  const itemsTotal=parseFloat(document.getElementById('ex_value')?.value)||0;
   if(!itemsTotal){document.getElementById('ex_deductions_summary').style.display='none';return;}
 
   const a=db.assignments.find(a=>a.id===document.getElementById('ex_assign')?.value);
@@ -2481,7 +2488,7 @@ function openContractModal(id=null){
     document.getElementById('co_guarantee_assign_group').style.display='none';
     document.getElementById('co_guarantee_extract_group').style.display='none';
     document.getElementById('co_desc').value='';
-    document.getElementById('co_type').value='itemized';
+    document.getElementById('co_type').value='fixed';
     renderBOQEditor([],'itemized');
   }
   toggleContractType();
@@ -2568,34 +2575,7 @@ function contractGuaranteeValue(c){
 }
 
 function toggleContractType(){
-  const t=document.getElementById('co_type').value;
-  const valEl=document.getElementById('co_value');
-  const hintEl=document.getElementById('co_value_hint');
-  const labelEl=document.getElementById('co_value_label');
-  const qtyHeader=document.getElementById('boqQtyHeader');
-  const totalHeader=document.getElementById('boqTotalHeader');
-  const totalLabel=document.getElementById('boqTotalLabel');
-  if(t==='itemized'){
-    valEl.readOnly=true;valEl.style.opacity='0.7';
-    labelEl.textContent='القيمة الإجمالية (تحسب تلقائياً من BOQ)';
-    hintEl.textContent='تُحسب تلقائياً: مجموع (سعر × كمية) لكل بند';
-    document.getElementById('boqTypeNote').textContent='كل بند: كمية × سعر = الإجمالي';
-    if(qtyHeader)qtyHeader.textContent='الكمية';
-    if(totalHeader)totalHeader.textContent='الإجمالي';
-    if(totalLabel)totalLabel.textContent='إجمالي العقد';
-  }else{
-    valEl.readOnly=false;valEl.style.opacity='1';
-    labelEl.textContent='قيمة سقف العقد الإجمالية *';
-    hintEl.textContent='⚠️ هذه القيمة هي السقف — أوامر الإسناد تخصم منها بالكميات المنفذة';
-    document.getElementById('boqTypeNote').textContent='كل بند: سعر الوحدة فقط — الكميات تُحدد في أوامر الإسناد';
-    if(qtyHeader)qtyHeader.textContent='كمية (لا تُحدد)';
-    if(totalHeader)totalHeader.textContent='سعر الوحدة';
-    if(totalLabel)totalLabel.textContent='ملاحظة';
-  }
-  // re-render BOQ to reflect type change
-  const rows=getBOQRows();
-  renderBOQEditor(rows,t);
-  updateBOQTotal();
+  // Contracts are always plain-value now (BOQ/itemized mode removed) — nothing to toggle.
 }
 function renderBOQEditor(rows,type){
   const isI=type==='itemized';
@@ -3109,28 +3089,6 @@ function openContractDetails(id){
       </table></div>`:'<div class="empty-state" style="padding:24px"><div class="empty-icon" style="font-size:32px">📋</div><p>لا توجد أوامر إسناد بعد</p></div>'}
     </div>
 
-    <!-- BOQ -->
-    <div class="card" style="margin-bottom:16px;padding:0">
-      <div class="card-header" style="padding:14px 16px">
-        <div class="card-title">📊 جدول الكميات (${(c.boq||[]).length} بند)</div>
-        <span style="font-size:13px;color:var(--text3)">${typeLabel}</span>
-      </div>
-      ${(c.boq||[]).length?`<div class="table-wrap"><table>
-        <thead><tr>
-          <th style="width:36px">#</th><th>WBS</th><th>الوصف</th><th>الوحدة</th>
-          ${c.type==='itemized'?'<th>الكمية</th>':''}
-          <th>سعر الوحدة</th><th>الإجمالي</th>
-        </tr></thead>
-        <tbody>${boqRows}</tbody>
-        <tfoot><tr>
-          <td colspan="${c.type==='itemized'?'5':'4'}" style="text-align:right;padding:10px;font-weight:700">
-            ${c.type==='itemized'?'إجمالي العقد':'سقف العقد المحدد'}
-          </td>
-          <td style="color:var(--accent);font-weight:700;text-align:center">${fmt(val)}</td>
-        </tr></tfoot>
-      </table></div>`:'<div class="empty-state" style="padding:24px"><div class="empty-icon" style="font-size:32px">📊</div><p>لا توجد بنود في جدول الكميات</p></div>'}
-    </div>
-
     <!-- Annexes -->
     ${annexes.length?`<div class="card" style="padding:0">
       <div class="card-header" style="padding:14px 16px">
@@ -3288,62 +3246,21 @@ function openAssignmentDetails(id){
   const statusBadge={'جارٍ':'badge-blue','منتهٍ':'badge-green','موقوف':'badge-amber'}[a.status]||'badge-gray';
   const daysLeft=a.end?Math.ceil((new Date(a.end)-new Date())/86400000):null;
 
-  // Build the assignment's own quantities table (per item: assigned qty, price,
-  // total value, extracted-to-date, remaining, completion %) — reuses the same
-  // item-matching approach already used in the extract editor's cumulative-qty logic.
-  const itemsTableHtml=(a.items||[]).length?`
-    <div class="table-wrap"><table class="boq-table">
-      <thead><tr><th>#</th><th>WBS</th><th>الوصف</th><th>الوحدة</th><th>الكمية المسندة</th><th>السعر</th><th>الإجمالي</th><th>المنجز</th><th>المتبقي</th><th>الإنجاز</th></tr></thead>
-      <tbody>${a.items.map((it,i)=>{
-        const extractedQty=extracts.reduce((s,e)=>{
-          const eItems=e.items||[];
-          let ei=eItems[i];
-          if(!ei||(it.desc&&ei.desc&&ei.desc!==it.desc)){
-            const byDesc=eItems.find(x=>x.desc&&it.desc&&x.desc===it.desc);
-            const byWbs=it.wbs?eItems.find(x=>x.wbs&&x.wbs===it.wbs):null;
-            ei=byDesc||byWbs||null;
-          }
-          if(!ei)return s;
-          let pq;
-          if(ei.periodQty!=null&&ei.periodQty!==''&&!isNaN(parseFloat(ei.periodQty))){
-            pq=parseFloat(ei.periodQty);
-          }else if(ei.currentQty!=null&&ei.prevQty!=null){
-            pq=Math.max(0,(parseFloat(ei.currentQty)||0)-(parseFloat(ei.prevQty)||0));
-          }else{
-            pq=0;
-          }
-          return s+pq;
-        },0);
-        const assignQty=parseFloat(it.assignQty)||0;
-        const price=parseFloat(it.price)||0;
-        const total=assignQty*price;
-        const remaining=Math.max(0,assignQty-extractedQty);
-        const pctItem=assignQty>0?Math.min(100,Math.round(extractedQty/assignQty*100)):0;
+  const extractsListHtml=extracts.length?`
+    <div class="table-wrap"><table>
+      <thead><tr><th>رقم المستخلص</th><th>النوع</th><th>التاريخ</th><th>الحالة</th><th>القيمة</th></tr></thead>
+      <tbody>${extracts.map(e=>{
+        const sb={'مقدم':'badge-blue','معتمد':'badge-amber','مدفوع':'badge-green','مرفوض':'badge-red'}[e.status]||'badge-gray';
         return`<tr>
-          <td style="text-align:center;color:var(--text3)">${i+1}</td>
-          <td><span class="wbs-code">${it.wbs||'—'}</span></td>
-          <td>${it.desc||'—'}</td>
-          <td style="text-align:center">${it.unit||'—'}</td>
-          <td style="text-align:center">${assignQty.toLocaleString('ar-EG')}</td>
-          <td style="text-align:center;color:var(--text2)">${fmt(price)}</td>
-          <td style="text-align:center;color:var(--accent);font-weight:600">${fmt(total)}</td>
-          <td style="text-align:center;color:var(--success);font-weight:600">${extractedQty.toLocaleString('ar-EG')}</td>
-          <td style="text-align:center;color:${remaining>0?'var(--warning)':'var(--success)'}">${remaining>0?remaining.toLocaleString('ar-EG'):'✅'}</td>
-          <td style="text-align:center">
-            <div style="display:flex;align-items:center;gap:5px;justify-content:center">
-              <div style="width:50px;height:6px;background:var(--bg4);border-radius:3px"><div style="height:100%;border-radius:3px;background:${pctItem>=80?'var(--success)':pctItem>=50?'var(--primary-light)':'var(--warning)'};width:${pctItem}%"></div></div>
-              <span style="font-size:12px;font-weight:700;color:${pctItem>=80?'var(--success)':pctItem>=50?'var(--primary-light)':'var(--warning)'}">${pctItem}%</span>
-            </div>
-          </td>
+          <td>${e.num}</td>
+          <td>${e.type||'مرحلي'}</td>
+          <td>${e.date||'—'}</td>
+          <td><span class="badge ${sb}">${e.status}</span></td>
+          <td style="color:var(--accent);font-weight:600">${fmt(extractValue(e))}</td>
         </tr>`;
       }).join('')}</tbody>
-      <tfoot><tr style="background:var(--bg3);font-weight:700">
-        <td colspan="6" style="text-align:right;padding:10px">الإجمالي</td>
-        <td style="text-align:center;color:var(--accent)">${fmt(val)}</td>
-        <td colspan="3"></td>
-      </tr></tfoot>
     </table></div>`
-    :`<div class="empty-state" style="padding:30px"><div class="empty-icon">📋</div><h3>لا توجد بنود مسجّلة على هذا الأمر</h3></div>`;
+    :`<div class="empty-state" style="padding:30px"><div class="empty-icon">🧾</div><h3>لا توجد مستخلصات بعد</h3></div>`;
 
   document.getElementById('adm_title').textContent=`أمر الإسناد — ${a.num}`;
   document.getElementById('adm_sub').textContent=`${c?.num||'—'} · ${a.desc||''} · ${a.status}`;
@@ -3394,12 +3311,12 @@ function openAssignmentDetails(id){
       </div>
     </div>
 
-    <!-- جدول كميات الأمر -->
+    <!-- المستخلصات -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:700;color:var(--text)">جدول كميات الأمر (${(a.items||[]).length} بند)</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text)">المستخلصات (${extracts.length})</div>
       <button class="btn btn-primary btn-sm" onclick="closeModal('assignDetailModal');openExtractModal()">+ مستخلص جديد</button>
     </div>
-    ${itemsTableHtml}`;
+    ${extractsListHtml}`;
 
   document.getElementById('assignDetailsEditBtn').onclick=()=>{closeModal('assignDetailModal');editAssignment(id);};
   openModal('assignDetailModal');
@@ -3414,6 +3331,7 @@ function openAssignmentModal(id=null){
     if(a){
       document.getElementById('as_num').value=a.num;
       document.getElementById('as_contract').value=a.contractId;
+      document.getElementById('as_value').value=a.value||0;
       document.getElementById('as_desc').value=a.desc||'';
       document.getElementById('as_start').value=a.start||'';
       document.getElementById('as_end').value=a.end||'';
@@ -3445,6 +3363,7 @@ function openAssignmentModal(id=null){
     }
   }else{
     document.getElementById('as_num').value=`ASN-${new Date().getFullYear()}-${String(db.assignments.length+1).padStart(3,'0')}`;
+    document.getElementById('as_value').value='';
     document.getElementById('as_start').value=today();
     ['as_end','as_desc','as_notes'].forEach(x=>document.getElementById(x).value='');
     document.getElementById('as_status').value='جارٍ';
@@ -3768,23 +3687,12 @@ function getAssignItems(){
 function saveAssignment(){
   const num=document.getElementById('as_num').value.trim(),cid=document.getElementById('as_contract').value;
   if(!num||!cid){toast('رقم الأمر والعقد مطلوبان','error');return;}
-  // Validate quantities and prices
-  let hasError=false;
-  document.querySelectorAll('#assignItemsBody tr').forEach(tr=>{
-    const qtyInput=tr.querySelector('.as-qty');
-    const qty=parseFloat(qtyInput?.value)||0;
-    const maxQty=parseFloat(tr.dataset.cqty)||0;
-    if(maxQty>0&&qty>maxQty){
-      qtyInput.style.borderColor='var(--danger)';
-      hasError=true;
-    }
-  });
-  if(hasError){toast('⚠️ بعض الكميات تتجاوز الحد المتاح من العقد — يرجى التصحيح','error');return;}
-  const items=getAssignItems();
+  const value=parseFloat(document.getElementById('as_value').value)||0;
+  if(!value){toast('قيمة الأمر مطلوبة','error');return;}
   const retentionBaseInput=document.getElementById('as_retention_base').value;
-  const retentionBaseValue=retentionBaseInput!==''?(parseFloat(retentionBaseInput)||0):items.reduce((s,it)=>s+(parseFloat(it.assignQty)||0)*(parseFloat(it.price)||0),0);
+  const retentionBaseValue=retentionBaseInput!==''?(parseFloat(retentionBaseInput)||0):value;
   const obj={
-    num,contractId:cid,
+    num,contractId:cid,value,
     desc:document.getElementById('as_desc').value,
     start:document.getElementById('as_start').value,
     end:document.getElementById('as_end').value,
@@ -3800,7 +3708,7 @@ function saveAssignment(){
     retentionRef:document.getElementById('as_retention_ref').value,
     retentionDueDays:parseInt(document.getElementById('as_retention_due_days').value)||15,
     retentionPaidStatus:document.getElementById('as_retention_paid_status').value,
-    items
+    items:[]
   };
   if(editId)Object.assign(db.assignments.find(a=>a.id===editId),obj);
   else db.assignments.push({id:uid(),...obj});
@@ -3920,6 +3828,7 @@ function openExtractModal(id=null){
     if(e){
       document.getElementById('ex_num').value=e.num;
       document.getElementById('ex_assign').value=e.assignId;
+      document.getElementById('ex_value').value=e.value||0;
       document.getElementById('ex_type').value=e.type||'مرحلي';
       document.getElementById('ex_date').value=e.date||'';
       document.getElementById('ex_status').value=e.status;
@@ -3930,14 +3839,12 @@ function openExtractModal(id=null){
       document.getElementById('ex_tax').value=e.tax||0;
       document.getElementById('ex_einvoice').value=e.einvoice||'';
       document.getElementById('ex_notes').value=e.notes||'';
-      renderExtractItemsEditor(e.items||[],e.assignId,id);
-      // Show hint for edit too
-      const a=db.assignments.find(a=>a.id===e.assignId);
-      const cnt=a?.items?.length||0;
-      updateExtractTabHint(cnt);
+      loadAssignItemsForExtract();
+      calcExtractDeductions();
     }
   }else{
     document.getElementById('ex_num').value=`EXT-${db.extracts.length+1}`;
+    document.getElementById('ex_value').value='';
     document.getElementById('ex_date').value=today();
     document.getElementById('ex_type').value='مرحلي';
     document.getElementById('ex_status').value='مقدم';
@@ -3949,9 +3856,6 @@ function openExtractModal(id=null){
     document.getElementById('ex_einvoice').value='';
     document.getElementById('ex_notes').value='';
     document.getElementById('ex_deductions_summary').style.display='none';
-    document.getElementById('extractItemsBody').innerHTML='';
-    document.getElementById('ex_boq_hint').style.display='none';
-    updateExtractItemsTotal();
     // Auto-load first assignment
     const firstAssign=db.assignments[0];
     if(firstAssign){
@@ -3960,21 +3864,25 @@ function openExtractModal(id=null){
     }
   }
   openModal('extractModal');
-  // Always reset to basic tab
-  const basicBtn=document.querySelector('#extractModal .tab-btn');
-  if(basicBtn)switchTab(basicBtn,'ex-basic');
 }
 function editExtract(id){openExtractModal(id);}
 function loadAssignItemsForExtract(){
   const aid=document.getElementById('ex_assign').value;
   const a=db.assignments.find(a=>a.id===aid);
-  const cnt=a?.items?.length||0;
-  if(a&&a.items&&a.items.length){
-    // نبعت editId عشان يستثني المستخلص الحالي من حساب prevQty
-    renderExtractItemsEditor([],aid,editId||null);
+  const summaryEl=document.getElementById('ex_assign_summary');
+  if(a){
+    const assignVal=assignmentValue(a);
+    const prevVal=db.extracts.filter(e=>e.assignId===aid&&e.status!=='مرفوض'&&e.id!==(editId||'__none__')).reduce((s,e)=>s+extractValue(e),0);
+    const remaining=Math.max(0,assignVal-prevVal);
+    summaryEl.style.display='';
+    summaryEl.innerHTML=`
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+        <div><span style="color:var(--text3);font-size:11px">قيمة الأمر</span><br><strong>${fmt(assignVal)}</strong></div>
+        <div><span style="color:var(--text3);font-size:11px">المنفذ في مستخلصات سابقة</span><br><strong style="color:var(--success)">${fmt(prevVal)}</strong></div>
+        <div><span style="color:var(--text3);font-size:11px">المتبقي</span><br><strong style="color:${remaining>0?'var(--warning)':'var(--success)'}">${remaining>0?fmt(remaining):'✅ مكتمل'}</strong></div>
+      </div>`;
   }else{
-    document.getElementById('extractItemsBody').innerHTML='';
-    updateExtractItemsTotal();
+    summaryEl.style.display='none';
   }
   // Show retention info based on payment method
   if(a&&(a.retention||0)>0){
@@ -4024,20 +3932,8 @@ function loadAssignItemsForExtract(){
   }else{
     document.getElementById('ex_retention_info').style.display='none';
   }
-  updateExtractTabHint(cnt);
 }
 
-function updateExtractTabHint(cnt){
-  const hint=document.getElementById('ex_boq_hint');
-  const tabBtn=document.querySelector('#extractModal .tabs .tab-btn:nth-child(2)');
-  if(cnt>0){
-    if(hint)hint.style.display='';
-    if(tabBtn)tabBtn.innerHTML=`بنود المستخلص <span style="background:var(--primary-glow);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-right:4px">${cnt}</span>`;
-  }else{
-    if(hint)hint.style.display='none';
-    if(tabBtn)tabBtn.textContent='بنود المستخلص';
-  }
-}
 function renderExtractItemsEditor(savedItems,assignId,currentExtractId){
   const a=db.assignments.find(a=>a.id===assignId);
   if(!a||!a.items){document.getElementById('extractItemsBody').innerHTML='';updateExtractItemsTotal();return;}
@@ -4172,34 +4068,20 @@ function getExtractItems(){
   }));
 }
 function getExtractCompletion(){
-  const rows=document.querySelectorAll('#extractItemsBody tr');if(!rows.length)return 0;
-  let ta=0,tc=0;
-  rows.forEach(tr=>{
-    ta+=parseFloat(tr.dataset.assignQty)||0;
-    tc+=(parseFloat(tr.dataset.prevQty)||0)+(parseFloat(tr.querySelector('.ext-pq')?.value)||0);
-  });
-  return ta>0?Math.round(tc/ta*100):0;
+  const aid=document.getElementById('ex_assign')?.value;
+  const a=db.assignments.find(a=>a.id===aid);
+  if(!a)return 0;
+  const assignVal=assignmentValue(a);
+  if(!assignVal)return 0;
+  const prevVal=db.extracts.filter(e=>e.assignId===aid&&e.status!=='مرفوض'&&e.id!==(editId||'__none__')).reduce((s,e)=>s+extractValue(e),0);
+  const thisVal=parseFloat(document.getElementById('ex_value')?.value)||0;
+  return Math.round(Math.min(100,(prevVal+thisVal)/assignVal*100));
 }
 function saveExtract(){
   const num=document.getElementById('ex_num').value.trim(),aid=document.getElementById('ex_assign').value;
   if(!num||!aid){toast('رقم المستخلص وأمر الإسناد مطلوبان','error');return;}
-  // Validate: period qty >= 0 and <= remaining
-  let hasError=false;
-  document.querySelectorAll('#extractItemsBody tr').forEach(tr=>{
-    const pqInput=tr.querySelector('.ext-pq');
-    const periodQty=parseFloat(pqInput?.value)||0;
-    const remaining=parseFloat(tr.dataset.remaining)||0;
-    if(periodQty<0||(remaining>=0&&periodQty>remaining)){
-      hasError=true;if(pqInput)pqInput.style.borderColor='var(--danger)';
-    }
-  });
-  if(hasError){toast('⚠️ بعض الكميات تتجاوز المتاح — يرجى التصحيح','error');return;}
-  const items=getExtractItems();
-  // Compute and save the value at time of saving as a backup
-  const savedValue=items.reduce((s,it)=>{
-    const periodQty=parseFloat(it.periodQty)||Math.max(0,(parseFloat(it.currentQty)||0)-(parseFloat(it.prevQty)||0));
-    return s+periodQty*(parseFloat(it.price)||0);
-  },0);
+  const value=parseFloat(document.getElementById('ex_value').value)||0;
+  if(!value){toast('قيمة المستخلص مطلوبة','error');return;}
   const obj={
     num,assignId:aid,
     type:document.getElementById('ex_type').value,
@@ -4212,8 +4094,8 @@ function saveExtract(){
     tax:document.getElementById('ex_tax').value,
     einvoice:document.getElementById('ex_einvoice').value,
     notes:document.getElementById('ex_notes').value,
-    items,
-    value:savedValue,  // backup value for recovery
+    items:[],
+    value,
     completion:getExtractCompletion()
   };
   if(editId)Object.assign(db.extracts.find(e=>e.id===editId),obj);
@@ -5156,7 +5038,6 @@ function renderReports(){
   renderRepGuarantees();
   renderRepPL();
   renderRepSub();
-  renderRepWbs();
 }
 
 // ========== 1. DASHBOARD ==========
@@ -6194,6 +6075,7 @@ await load();
 ensureWbsHierarchy();
 repairWbsHierarchy();
 ensureAssignmentRetentionBase();
+ensureSimplifiedValues();
 // Auto-repair: fix periodQty for all extracts chronologically (silent)
 (()=>{
   let repaired=false;
